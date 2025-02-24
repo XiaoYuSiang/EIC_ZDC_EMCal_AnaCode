@@ -1,0 +1,4 @@
+
+# DO NOT DELETE
+tmpdir/SelectScidata_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/RVersion.h /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/RConfig.hxx /home/yusiang/.conda/envs/ROOT6_30/include/TClass.h /home/yusiang/.conda/envs/ROOT6_30/include/TDictAttributeMap.h /home/yusiang/.conda/envs/ROOT6_30/include/TInterpreter.h /home/yusiang/.conda/envs/ROOT6_30/include/TROOT.h /home/yusiang/.conda/envs/ROOT6_30/include/TBuffer.h /home/yusiang/.conda/envs/ROOT6_30/include/TMemberInspector.h /home/yusiang/.conda/envs/ROOT6_30/include/TError.h /home/yusiang/.conda/envs/ROOT6_30/include/RtypesImp.h /home/yusiang/.conda/envs/ROOT6_30/include/TIsAProxy.h /home/yusiang/.conda/envs/ROOT6_30/include/TFileMergeInfo.h /home/yusiang/.conda/envs/ROOT6_30/include/TCollectionProxyInfo.h /home/yusiang/.conda/envs/ROOT6_30/bin/rootcling
+SelectScidata_C__ROOTBUILDVERSION= 6.30/04

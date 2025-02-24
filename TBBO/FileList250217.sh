@@ -1,0 +1,5 @@
+sleep 0 &&root -l -b -q Read.C\("\"/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run218_706MeV_HV200_VF260_300_x60_Pos0mm_0mm_0mm_144210.779LYSO.bin\"","\"/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run218_706MeV_HV200_VF260_300_x60_Pos0mm_0mm_0mm_144210.779LYSO.bin\"","\"/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run218_706MeV_HV16_VF320_320_x4_Pos0mm_0mm_0mm_144210.754Monitor1.bin\"","\"/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run218_706MeV_HV17_VF320_320_x4_Pos0mm_0mm_0mm_144210.754Monitor2.bin\"","\"\"",31\) &
+sleep 0 &&root -l -b -q Read.C\("\"/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run219_706MeV_HV205_VF260_300_x60_Pos0mm_0mm_0mm_144549.351LYSO.bin\"","\"/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run219_706MeV_HV205_VF260_300_x60_Pos0mm_0mm_0mm_144549.351LYSO.bin\"","\"/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run219_706MeV_HV16_VF320_320_x4_Pos0mm_0mm_0mm_144549.291Monitor1.bin\"","\"/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run219_706MeV_HV17_VF320_320_x4_Pos0mm_0mm_0mm_144549.291Monitor2.bin\"","\"\"",31\) &
+wait
+echo "Finish the scripe"
+
