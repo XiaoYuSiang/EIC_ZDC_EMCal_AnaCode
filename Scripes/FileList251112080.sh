@@ -1,4 +1,0 @@
-sleep 0 &&root -l -b -q Read.C\("\"/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080_HV210_VF_270_270__x60_200228.595LYSO.bin\"","\"/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080_HV210_VF_270_270__x60_200228.595LYSO.bin\"","\"/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080_HV16_VF_320_320__x4_200228.513Monitor1.bin\"","\"/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080_HV17_VF_320_320__x4_200228.513Monitor2.bin\"","\"/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080_HV17_VF_620_648__x60_200228.595PbWO4.bin\"",4\) &
-wait
-echo "Finish the scripe"
-
