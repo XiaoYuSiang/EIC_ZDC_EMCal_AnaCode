@@ -1,0 +1,70 @@
+
+# DO NOT DELETE
+
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TTree.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/Compression.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/RtypesCore.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/RConfig.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/RVersion.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/RVersion.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/RConfigure.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/DllImport.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/TIOFeatures.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/Rtypes.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/strtok.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/strlcpy.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/snprintf.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TGenericClassInfo.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TSchemaHelper.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TIsAProxy.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TVirtualIsAProxy.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TArrayD.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TArray.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TArrayI.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TAttFill.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TAttLine.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TAttMarker.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TClass.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TDictionary.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TNamed.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TObject.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TStorage.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TVersionCheck.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/RVersion.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TString.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TMathBase.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/RStringView.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/TypeTraits.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ESTLType.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TObjArray.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TSeqCollection.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TCollection.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TIterator.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TVirtualRWMutex.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TVirtualMutex.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/RRangeCast.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/RSpan.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/span.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TDataType.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TDirectory.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TUUID.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TList.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TBuffer.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/Bytes.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TVirtualTreePlayer.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TBranch.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TBranchCacheInfo.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TBits.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TFile.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TDirectoryFile.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TDatime.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/TUrl.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/RConcurrentHashColl.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/TRWSpinLock.hxx
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/TSpinMutex.hxx
+tmpdir/DecodeSciRaw_C.so: ./GIDMapping.h ./GIDMapping_Cosmic_TriggerTop.h
+tmpdir/DecodeSciRaw_C.so: ./GIDMapping_Cosmic_TriggerBottom.h
+tmpdir/DecodeSciRaw_C.so: ./GIDMapping_Cosmic_LYSOV2.h
+tmpdir/DecodeSciRaw_C.so: ./GIDMapping_PYSOAPDMap.h ./GIDMapping_PWOSIPMMap.h
+tmpdir/DecodeSciRaw_C.so: /home/yusiang/.conda/envs/ROOT6_30/include/RVersion.h /home/yusiang/.conda/envs/ROOT6_30/include/ROOT/RConfig.hxx /home/yusiang/.conda/envs/ROOT6_30/include/TClass.h /home/yusiang/.conda/envs/ROOT6_30/include/TDictAttributeMap.h /home/yusiang/.conda/envs/ROOT6_30/include/TInterpreter.h /home/yusiang/.conda/envs/ROOT6_30/include/TROOT.h /home/yusiang/.conda/envs/ROOT6_30/include/TBuffer.h /home/yusiang/.conda/envs/ROOT6_30/include/TMemberInspector.h /home/yusiang/.conda/envs/ROOT6_30/include/TError.h /home/yusiang/.conda/envs/ROOT6_30/include/RtypesImp.h /home/yusiang/.conda/envs/ROOT6_30/include/TIsAProxy.h /home/yusiang/.conda/envs/ROOT6_30/include/TFileMergeInfo.h /home/yusiang/.conda/envs/ROOT6_30/include/TCollectionProxyInfo.h /home/yusiang/.conda/envs/ROOT6_30/bin/rootcling
+DecodeSciRaw_C__ROOTBUILDVERSION= 6.30/04
