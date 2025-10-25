@@ -4,18 +4,19 @@
 #include <typeinfo>
 #include <algorithm>
 #include <sstream>
+#include "GetScripeFunctions.h"
 /*
 root -b -q GetScripe.C
 */
-
 using namespace std;
-const int    NumDirs =1;
-const int cpumax = 10;
-const string Opmode = "1";
+const int cpumax = 64;
+const double Memmax = 110.e+9;//Byte
+const string Opmode = "3";
 // 1 = 0b00001, 3 = 0b00011, 7 = 0b00111, 15 = 0b01111, 31 = 0b11111
-const string BashFile = "FileList250219_PWO.sh";
-const string OutputPath = "./TBBO_PWO/";
+const string BashFile = "FileListFeb25PWOOnly.sh";
+const string OutputPath = "/data8/ZDC/EMCal/BeamTest/Feb25Sort/RunScripts/";
 const string Cases[4] = {"PbWO4","Monitor1","Monitor2","LYSO"};
+const int NumDirs =1;
 const string VDirs[NumDirs]={
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250127/*",
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250128/*"
@@ -26,13 +27,16 @@ const string VDirs[NumDirs]={
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run20[7,8,9]*",
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run21[0,1]*"
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0219/Run838*",
-  "/data8/ZDC/EMCal/BeamTest/BeamOn0220/Run2041*"
+  "/data8/ZDC/EMCal/BeamTest/Feb25Sort/Feb25PWOOnly/Run2*"
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0220/Run20{8[8-9],9[0-6]}*"
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run212*"
   // "/data8/ZDC/EMCal/BeamTest/20250215/BeamMoniter/20250216/Run118*_07*"
   // "/data8/ZDC/EMCal/PbWO4SiPM/250204/Co60_HV16_FV_290_320_LG_x10*",
   // "/data8/ZDC/EMCal/PbWO4SiPM/250204/Cs137_HV16_FV_290_320_LG_x10*",
   // "/data8/ZDC/EMCal/PbWO4SiPM/250204/BG_HV16_FV_290_320_LG_x10*"
+};
+const string VSDirs[NumDirs]={
+  "/data8/ZDC/EMCal/BeamTest/Feb25Sort/Feb25PWOOnly/"
 };
 
 // 4/10/20/60
@@ -107,11 +111,6 @@ string VNMD2[NumDirs]={
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run20*PbWO4"
   // "/data8/ZDC/EMCal/PbWO4SiPM/250127/*"
 };
-string SetPathAuto(string vStrCase,string Case,string vStrMain){
-  if(vStrCase=="auto") return vStrMain+Case;
-  return vStrCase;
-}
-
 void GetScripe(){
   system(Form("mkdir -p %s",OutputPath.data()));
   
@@ -125,89 +124,69 @@ void GetScripe(){
     VNT1 [i] = SetPathAuto(VNT1 [i],Cases[1],VDirs[i]);
     VNT2 [i] = SetPathAuto(VNT2 [i],Cases[2],VDirs[i]);
     VNMD2[i] = SetPathAuto(VNMD2[i],Cases[3],VDirs[i]);
-    system(Form("sh /data8/ZDC/EMCal/APDLYSO/AnaCode/rename_bin.sh %s",VNMD1[i].data()));
-    system(Form("sh /data8/ZDC/EMCal/APDLYSO/AnaCode/rename_bin.sh %s",VNMD2[i].data()));
-    system(Form("sh /data8/ZDC/EMCal/APDLYSO/AnaCode/rename_bin.sh %s",VNT1[i].data()));
-    system(Form("sh /data8/ZDC/EMCal/APDLYSO/AnaCode/rename_bin.sh %s",VNT2[i].data()));
-    
-    
     string dirfsMD1 = Form("%sdirfsMD1%d.dat",OutputPath.data(),i);
-    system(Form("ls -1 %s*.bin>>%s",VNMD1[i].data(),dirfsMD1.data()));
-    ifstream inMD1(dirfsMD1.data());
-    
-    bool SubDetOn[3] = {0};
     string dirfsT1 = Form("%sdirfsT1%d.dat",OutputPath.data(),i);
-    if(VNT1[i]!="") SubDetOn[0] = true;
-    system(Form("ls -1 %s*.bin>>%s",VNT1[i].data(),dirfsT1.data()));
-    ifstream inT1(dirfsT1.data());
-    
     string dirfsT2 = Form("%sdirfsT2%d.dat",OutputPath.data(),i);
-    if(VNT2[i]!="") SubDetOn[1] = true;
-    system(Form("ls -1 %s*.bin>>%s",VNT2[i].data(),dirfsT2.data()));
-    ifstream inT2(dirfsT2.data());
-    
     string dirfsMD2 = Form("%sdirfsMD2%d.dat",OutputPath.data(),i);
-    if(VNMD2[i]!="") SubDetOn[2] = true;
-    system(Form("ls -1 %s*.bin>>%s",VNMD2[i].data(),dirfsMD2.data()));
-    ifstream inMD2(dirfsMD2.data());
     
+    string VNs[4]={VNMD1[i], VNT1 [i], VNT2 [i], VNMD2[i]};
+    string dirfss[4]={dirfsMD1, dirfsT1, dirfsT2, dirfsMD2};
+    for(int ic = 0;ic<4;ic++){
+      system(Form("sh /data8/ZDC/EMCal/APDLYSO/AnaCode/rename_bin.sh %s",VNs[ic].data()));
+      system(Form("ls -1 %s*.bin>>%s",VNs[ic].data(),dirfss[ic].data()));
+    }
+    map< pair<string, string> , vector<string> > FileClass = classifyDatas(Cases,dirfss);
+    string SavePath = VSDirs[i];
     string strtmp, fileroot, cmdline;
-    while(inMD1>>strtmp){
-      fileroot = strtmp;
-      int delay = ifiles ==0? 0 : 0;
-      cmdline = Form("sleep %d &&root -l -b -q Read.C\\(",delay);
+    double DataSizes = 0, TotalSize = 0;
+    int DataNum = 0;
+    // while(inMD1>>strtmp){
+    for (const auto& entry : FileClass) {
+      const auto& key = entry.first;        // pair<string,string>
+      const auto& values = entry.second;
+      fileroot = SavePath+values[0].substr(values[0].rfind("/")+1,values[0].size()-(values[0].rfind("/")+1));
+      cmdline = Form("root -l -b -q Read.C\\(");
       cmdline+= "\"\\\""+fileroot+"\\\"\""+",";
-      cmdline+= "\"\\\""+fileroot+"\\\"\""+",";
-      
-      if(SubDetOn[0]){
-        inT1>>strtmp;
-        cmdline+= "\"\\\""+strtmp+"\\\"\""+",";
-      }else{
-        cmdline+= "\"\\\""+string("")+"\\\"\""+",";
-      }
-      
-      if(SubDetOn[1]){
-        inT2>>strtmp;
-        cmdline+= "\"\\\""+strtmp+"\\\"\""+",";
-      }else{
-        cmdline+= "\"\\\""+string("")+"\\\"\""+",";
-      }
-
-      if(SubDetOn[2]){
-        inMD2>>strtmp;
-        cmdline+= "\"\\\""+strtmp+"\\\"\""+",";
-      }else{
-        cmdline+= "\"\\\""+string("")+"\\\"\""+",";
+      for(int ic = 0;ic<4;ic++){
+        if(values[ic]!="") {
+          DataNum++;
+          DataSizes+= FileSize(values[ic].data(),'q');
+        }
+        cmdline+= "\"\\\""+values[ic]+"\\\"\""+",";
       }
 
       cmdline+= Opmode+"\\) &";
       cout<<cmdline<<endl;
-      outbash<<cmdline<<endl;
       ifiles++;
-      icpu++;
-      if(icpu>=cpumax){
+      if((DataSizes+TotalSize)*75.>Memmax||(icpu + DataNum)>=cpumax){
+        if((DataSizes+TotalSize)*75.>Memmax)
+          outbash<<"echo Mem: "<<(DataSizes+TotalSize)*75.<<">"<<Memmax;
+        else 
+          outbash<<"echo CPU: "<<(icpu + DataNum)<<">="<<cpumax;
+        outbash<<endl;
         icpu = 0;
+        TotalSize = 0;
         outbash<<"wait"<<endl;
       }
+      icpu += DataNum+1;
+      TotalSize += DataSizes;
+      DataSizes = 0;
+      DataNum = 0;
+      outbash<<cmdline<<endl;
     }
-    system(("rm "+dirfsMD1).data());
-    system(("rm "+dirfsT1).data());
-    system(("rm "+dirfsT2).data());
-    system(("rm "+dirfsMD2).data());
-    inMD1.close();
-    inT1.close();
-    inT2.close();
-    inMD2.close();
+    for(int ic = 0;ic<4;ic++)
+      system(("rm "+dirfss[ic]).data());
   }
   // throw;
   outbash<<"wait"<<endl;
   outbash<<"echo \"Finish the scripe\"\n"<<endl;
   cout<<"finish: "<<(OutputPath+BashFile).data()<<endl;
   
+  // throw;
   
   
-  const int NScripes = 8;
-  string scripeNames[NScripes] = {"BinToHex","SelectScidata","Decoding","DecodeSciRaw","ReConstruct","DrawTriggerLinesCenter","DrawADCRec","DrawADC"};
+  const int NScripes = 9;
+  string scripeNames[NScripes] = {"BinToHex","SelectScidata","Decoding","DecodingV2","DecodeSciRaw","ReConstruct","DrawTriggerLinesCenter","DrawADCRec","DrawADC"};
   if(true){
     string cmdline = "";
     for(int i=0; i <NScripes;i++)
