@@ -4,105 +4,114 @@
 #include <typeinfo>
 #include <algorithm>
 #include <sstream>
+#include <string>
 #include "GetScripeFunctions.h"
 /*
 root -b -q GetScripe.C
 */
 using namespace std;
-const int cpumax = 64;
-const double Memmax = 110.e+9;//Byte
-const string Opmode = "31";
+const int cpumax = 20;
+const double Memmax = 150.e+9;//Byte
+const string Opmode = "29";
+const int iSaveAtWhere = 1;
+// 0 Class be run-time in VSDirs, 1 Class be run-time in VDirs
+const double FileTimeStampGap = 300; //(s)
 // 1 = 0b00001, 3 = 0b00011, 7 = 0b00111, 15 = 0b01111, 31 = 0b11111
-const string BashFile = "FileListBMCaliTest.sh";
-// const string OutputPath = "./Feb2025/";
-const string OutputPath = "/data8/ZDC/EMCal/BeamTest/Feb25Sort/BMCali/Test/";
+const string BashFile = "FileListCosTest.sh";
+const string OutputPath = "./CosTest/";
 const string Cases[4] = {"LYSO","Monitor1","Monitor2","PbWO4"};
-const int NumDirs =1;
+const int NumDirs =8;
 const string VDirs[NumDirs]={
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250127/*",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250128/*"
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25020708/*",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/2502080910/*",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080*"
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run205*",
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run20[7,8,9]*",
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run21[0,1]*"
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0219/Run838*",
-  // "/data8/ZDC/EMCal/BeamTest/Feb25Sort/Feb25LYSOOnly/Run*MeV*"
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run212*"
+  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run20[7,8,9]*"
+  // "/data8/ZDC/EMCal/CitiROC_Cosmic_Data/*/Run4003*",
+  "/data8/ZDC/EMCal/CitiROC_Cosmic_Data/2025-10-09/Run4004*_211*",
+  // "/data8/ZDC/EMCal/CitiROC_Cosmic_Data/*/Run4005*",
+  // "/data8/ZDC/EMCal/CitiROC_Cosmic_Data/*/Run4006*",
+  // "/data8/ZDC/EMCal/CitiROC_Cosmic_Data/*/Run4007*",
+  // "/data8/ZDC/EMCal/CitiROC_Cosmic_Data/*/Run4008*",
+  // "/data8/ZDC/EMCal/CitiROC_Cosmic_Data/*/Run4009*",
+  // "/data8/ZDC/EMCal/CitiROC_Cosmic_Data/*/Run4010*"
+  // "/data8/ZDC/EMCal/BeamTest/BeamOn0220/Run20{8[8-9],9[0-6]}*"
   // "/data8/ZDC/EMCal/BeamTest/20250215/BeamMoniter/20250216/Run118*_07*"
-  // "/data8/ZDC/EMCal/PbWO4SiPM/250204/Co60_HV16_FV_290_320_LG_x10*",
-  // "/data8/ZDC/EMCal/PbWO4SiPM/250204/Cs137_HV16_FV_290_320_LG_x10*",
   // "/data8/ZDC/EMCal/PbWO4SiPM/250204/BG_HV16_FV_290_320_LG_x10*"
-  // "/data8/ZDC/EMCal/BeamTest/AS_NoiseTest/Run*"
-  "/data8/ZDC/EMCal/BeamTest/Feb25Sort/BMCali/Na22*"
 };
+//  root path of Saving paths
 const string VSDirs[NumDirs]={
-  "/data8/ZDC/EMCal/BeamTest/Feb25Sort/BMCali/"
+  // "/data8/ZDC/EMCal/BothZDCABM/AnaCode2/CosTest/Run4003/",
+  "/data8/ZDC/EMCal/BothZDCABM/AnaCode2/CosTest/Run4004/",
+  // "/data8/ZDC/EMCal/BothZDCABM/AnaCode2/CosTest/Run4005/",
+  // "/data8/ZDC/EMCal/BothZDCABM/AnaCode2/CosTest/Run4006/",
+  // "/data8/ZDC/EMCal/BothZDCABM/AnaCode2/CosTest/Run4007/",
+  // "/data8/ZDC/EMCal/BothZDCABM/AnaCode2/CosTest/Run4008/",
+  // "/data8/ZDC/EMCal/BothZDCABM/AnaCode2/CosTest/Run4009/",
+  // "/data8/ZDC/EMCal/BothZDCABM/AnaCode2/CosTest/Run4010/"
 };
+
 // 4/10/20/60
 string VNMD1[NumDirs]={
   // "auto",
-  "auto"
+  "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto"
   // ""
   // "/data8/ZDC/EMCal/PbWO4SiPM/250206/*PbWO4",
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250127/*LYSO",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250128/*LYSO"
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25020708/*LYSO",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/2502080910/*LYSO",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080*LYSO"
-  // "/data8/ZDC/EMCal/BeamTest/20250216Run118/Run118*_07*_08*LYSO",
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run205*LYSO",
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run20[7,8,9]*LYSO",
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run21[0,1]*LYSO"
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run2*LYSO"
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run212*LYSO"
-  // "/data8/ZDC/EMCal/PbWO4SiPM/250204/Co60_HV16_FV_290_320_LG_x10*",
-  // "/data8/ZDC/EMCal/PbWO4SiPM/250204/Cs137_HV16_FV_290_320_LG_x10*",
   // "/data8/ZDC/EMCal/PbWO4SiPM/250204/BG_HV16_FV_290_320_LG_x10*"
-  // "/data8/ZDC/EMCal/PbWO4SiPM/250127/*"
 };
 string VNT1[NumDirs]={
   // "auto",
-  ""
+  "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto"
   // ""
   // "",
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250127/*Trigger1",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250128/*Trigger1"
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25020708/*Monitor1",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/2502080910/*Monitor1",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080*Monitor1"
   // "/data8/ZDC/EMCal/BeamTest/20250216Run118/Run118*_07*_08*Monitor1",
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run205*Monitor1",
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run20[7,8,9]*Monitor1",
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run21[0,1]*Monitor1"
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run2*Monitor1"
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run212*Monitor1"
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250128/*Trigger1"
   // "/data8/ZDC/EMCal/PbWO4SiPM/250127/*"
 };
 string VNT2[NumDirs]={
+  "auto",
   // "auto",
-  ""
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto"
   // ""
   // "",
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250127/*Trigger2",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250128/*Trigger2"
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25020708/*Monitor2",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/2502080910/*Monitor2",
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080*Monitor2"
   // "/data8/ZDC/EMCal/BeamTest/20250216Run118/Run118*_07*_08*Monitor2",
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run205*Monitor2",
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run20[7,8,9]*Monitor2",
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run21[0,1]*Monitor2"
-  // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run2*Monitor2"
   // "/data8/ZDC/EMCal/BeamTest/BeamOn0217/Run212*Monitor2"
-  // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/250128/*Trigger2"
   // "/data8/ZDC/EMCal/PbWO4SiPM/250127/*"
 };
 string VNMD2[NumDirs]={
-  // "" ,
-  "auto"  
+  // ""  
+  // "auto",
+  "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto",
+  // "auto"
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25020708/*PbWO4",
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/2502080910/*PbWO4",
   // "/data8/ZDC/EMCal/LYSOPWOBMCosmic/25021112/Run080*PbWO4"
@@ -135,18 +144,31 @@ void GetScripe(){
     string dirfss[4]={dirfsMD1, dirfsT1, dirfsT2, dirfsMD2};
     for(int ic = 0;ic<4;ic++){
       system(Form("sh /data8/ZDC/EMCal/APDLYSO/AnaCode/rename_bin.sh %s",VNs[ic].data()));
+      system(Form("> %s", dirfss[ic].data()));  
       system(Form("ls -1 %s*.bin>>%s",VNs[ic].data(),dirfss[ic].data()));
     }
-    map< pair<string, string> , vector<string> > FileClass = classifyDatas(Cases,dirfss);
-    string SavePath = VSDirs[i];
-    string strtmp, fileroot, cmdline;
+    map< pair<string, string> , vector<string> > FileClass = classifyDatas(Cases,dirfss,FileTimeStampGap);
+        
+    // 1 Class be run-time in VSDirs, 2 Class be run-time in Main Det dir, 3. Save at Main Det .bins dir
+    string SavePath = "", strtmp, fileroot, cmdline;
+    if      (iSaveAtWhere == 0) SavePath = VSDirs[i];
+    else if(iSaveAtWhere != 1){
+      cout<<"Error: GetScripe.C ~L160: The val of iSaveAtWhere is illegal: "<<iSaveAtWhere<<endl;
+      throw;
+    }
     double DataSizes = 0, TotalSize = 0;
     int DataNum = 0;
+    // throw;
     // while(inMD1>>strtmp){
     for (const auto& entry : FileClass) {
       const auto& key = entry.first;        // pair<string,string>
       const auto& values = entry.second;
-      fileroot = SavePath+values[0].substr(values[0].rfind("/")+1,values[0].size()-(values[0].rfind("/")+1));
+      if (iSaveAtWhere == 0)
+        fileroot = SavePath+values[0].substr(values[0].rfind("/")+1,values[0].size()-(values[0].rfind("/")+1));
+      else if (iSaveAtWhere == 1)
+        fileroot = values[0];
+      // else if (iSaveAtWhere == 2)
+        // fileroot = values[0].substr(0,values[0].rfind("/")+1);
       cmdline = Form("root -l -b -q Read.C\\(");
       cmdline+= "\"\\\""+fileroot+"\\\"\""+",";
       for(int ic = 0;ic<4;ic++){
@@ -160,17 +182,17 @@ void GetScripe(){
       cmdline+= Opmode+"\\) &";
       cout<<cmdline<<endl;
       ifiles++;
-      if((DataSizes+TotalSize)*75.>Memmax||(icpu + DataNum)>=cpumax){
+      if((DataSizes+TotalSize)*75.>Memmax||(icpu + DataNum)>cpumax){
         if((DataSizes+TotalSize)*75.>Memmax)
           outbash<<"echo Mem: "<<(DataSizes+TotalSize)*75.<<">"<<Memmax;
         else 
-          outbash<<"echo CPU: "<<(icpu + DataNum)<<">="<<cpumax;
+          outbash<<"echo CPU: "<<(icpu + DataNum)<<">"<<cpumax;
         outbash<<endl;
         icpu = 0;
         TotalSize = 0;
         outbash<<"wait"<<endl;
       }
-      icpu += DataNum+1;
+      icpu += DataNum;
       TotalSize += DataSizes;
       DataSizes = 0;
       DataNum = 0;

@@ -21,9 +21,9 @@ const int DetSeq[5]={-1,2,1,0,3};
 // const int MainDZ  = 1;
 const double TestRate = 1;
 const bool bTrigger[5]={0,0,1,1,0};
-const int MainDID = 1;
-const int MainDZ  = 2;
-Long64_t threshold = 1;
+const int MainDID = 4;
+const int MainDZ  = 3;
+Long64_t  threshold = 1;
 struct Event {
   vector<Long64_t> eNtryID;
   vector<Int_t> DID, pcnt, fcnt, ROCID;
@@ -346,6 +346,7 @@ void processFiles(
   int PeakID = -1;
   TFile *fSave = new TFile((dirAnaPath+FileName+"_ReCon.root").data(),"recreate");
   TTree *tSave = new TTree("t","Tree of all detector data");
+  // tSave->SetAutoFlush(100000);
 
   tSave->Branch("eventID", &eID);
   tSave->Branch("pcnt", &pcntEV);
@@ -432,6 +433,7 @@ void processFiles(
       // ofEFF<<eID<<"\t"<<0<<endl;
       continue;
     }
+    // cout<<eID<<"\t"<<1<<endl;
     // ofEFF<<eID<<"\t"<<1<<endl;
     ofSave<<"--------------\nGieV = "<<i<<" / evs: "<<gEVS<<endl;
     // auto point1 = std::chrono::high_resolution_clock::now();
@@ -501,6 +503,10 @@ void processFiles(
     if(PeakID==-1){
       // cout<<500<<endl;
       ofSave<<"PeakID == -1"<<endl;
+      // for(size_t ihits=0;ihits<channelEV.size();ihits++){
+        // ofSave<<iHitEV[ihits]<<" "<<DIDEV[ihits]<<" "<<ROCIDEV[ihits]<<" "<<GIDEV[ihits]<<" "<<FireEV[ihits]<<" "<<ADCEV[ihits]<<" "<<GADCEV[ihits]<<endl;
+      // }
+        
     }else{
       // cout<<503<<endl;
       GADC11 = GADCEV[PeakID],GADC33 = 0,GADCXs = 0,GADC55 = 0,GADCAL = 0;

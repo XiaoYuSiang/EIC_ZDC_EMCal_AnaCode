@@ -63,6 +63,7 @@ vector<string> parseHexFile(const string& filename) {
     while (file >> word) {
         hexData.push_back(word);
     }
+    cout<<"L66: "<<filename<<" , hex array size: "<<hexData.size()<<endl;
     return hexData;
 }
 
@@ -161,6 +162,8 @@ vector<Packet> extractPackets(const vector<string>& hexData) {
       }
     }
   }
+  
+  cout<<"L166: packets array size: "<<packets.size()<<endl;
   return packets;
 }
 // 主程式
@@ -282,9 +285,9 @@ void Decoding(
   t->Branch("BufferLTB",   &BufferLTB  );
   t->Branch("RotateAng",   &RotateAng  );
   
-    vector<string> hexData = parseHexFile(HexRawSciFileName);
-    vector<Packet> packets = extractPackets(hexData);
-
+  vector<string> hexData = parseHexFile(HexRawSciFileName);
+  vector<Packet> packets = extractPackets(hexData);
+  cout<<"L290"<<endl;
   double Eff = 0, Tot = 0, Loss = 0;
   for (const auto& pkt : packets) {
       // cout << "Packet: ";
@@ -299,7 +302,7 @@ void Decoding(
     } 
   };
   Eff = ( Loss ) / Tot;
-  cout<<100*Eff<<"%"<<endl;
+  cout<<"Loss rate : "<<100*Eff<<"%"<<endl;
   stringstream ofiss;
   // while(inRawSci>>Hitdata[0]>>Hitdata[1]>>Hitdata[2]&&iData<198){ // test break line 
   // int ByteIndex = 0;
@@ -529,14 +532,17 @@ void Decoding(
     }
     
   }
+  packets.clear();
+  hexData.clear();
+
   if(pcnt0!=-1) t->Fill();
   f->Write();// save the TTree into the tfile
   f->Close();// tfile closeed
   
   // lost = ByteIndex; 
   f->Close();
+  delete t;
 
-  
   cout<<"Finish to decode the science data\n";
   ofstream ott(Form("%s/ConvertProblem_DID%d.dat",NameRoot.data(),iDetector) );
   ofstream ott2(Form("%s/ConvertProblemNew_DID%d.dat",NameRoot.data(),iDetector) );
@@ -557,6 +563,8 @@ void Decoding(
   ott2<<"-----------------------------\n"<<endl;
   ott.close();
   ott2.close();
+  ofReadab.close();
+  ofSyncData.close();
   // cout<<(Form("root -l -b -q Read.C+\\(\\\"%s\\\"\\)",NameRoot.data()))<<endl;
 }
 void Decoding(){
