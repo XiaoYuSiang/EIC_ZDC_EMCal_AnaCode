@@ -1,0 +1,4 @@
+ssh-keygen -t rsa
+ssh yusiang@chip03.phy.ncu.edu.tw "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+Get-Content $env:USERPROFILE\.ssh\id_rsa.pub | ssh yusiang@chip03.phy.ncu.edu.tw "cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+ssh yusiang@chip03.phy.ncu.edu.tw
