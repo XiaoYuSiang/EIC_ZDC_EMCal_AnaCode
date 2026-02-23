@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <base id="global-path" href="./">
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        :root {
+            --gap-size: 10px;
+            --min-card-width: 550px;
+            --bg-color: #f6ffe0;
+        }
+        h1 { font-size: 4.0rem; color: #eb4e7f; margin-bottom: 1.0rem; }
+        h2 { font-size: 4.0rem; margin-top: 5px; border-top: 1.0rem solid #eb4e7f; color: #eb4e7f; margin-bottom: 1.0rem; text-align: center; }
+        h3 { 
+            font-size: 2.8rem; margin-top: 5px; margin-bottom: 5px; color: #4eb0ba; 
+            border-top: 0.2rem solid #4eb0ba; padding-bottom: 0.5rem; text-align: center; 
+            scroll-margin-top: 60px; /* 關鍵修正：預留空間給置頂的分頁列 */
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0; padding: 20px;
+            width: 1550px; overflow-x: hidden;
+            padding-right: 0px; /* 預留空間給懸浮按鈕，避免擋住內容 */
+        }
+
+        .report-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(var(--min-card-width), 1fr));
+            align-items: center;
+            gap: 15px;
+        }
+
+        .card {
+            background: rgb(255, 255, 255); border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(32, 137, 202, 0.1);
+            transition: transform 0.2s;
+            position: relative; overflow: visible;
+        }
+
+        .unit-toggle {
+            position: absolute; top: 1px; right: 1px; z-index: 100;
+            padding: 4px 8px; font-size: 12px; background-color: rgba(52, 152, 219, 0.9);
+            color: white; border: none; border-radius: 4px; cursor: pointer;
+        }
+        .unit-toggle.active { background-color: #e67e22; }
+
+        .image-container { position: relative; width: 100%; overflow: hidden; background-color: #000; }
+        
+        .fade-img { width: 100%; display: block; transition: opacity 0.3s; }
+        .preview-img { position: absolute; top: 0; left: 0; width: 100%; opacity: 0; transition: opacity 0.3s; }
+        .card:hover .fade-img { opacity: 0; }
+        .card:hover .preview-img { opacity: 1; }
+
+        .main-img { width: 100%; display: block; transition: transform 0.3s; }
+        .card:hover .main-img { transform: scale(1.01); z-index: 50; }
+        .card img { cursor: zoom-in; }
+
+        .card-info { padding: 10px; text-align: center; background: #fff; }
+        .card-title { font-size: 30px; font-weight: 800; color: #6a53ec; margin-bottom: 5px; }
+        .card-path { font-size: 12px; color: #0b1213; font-family: monospace; word-break: break-all; }
+        .report-grid > *:not(.card) {
+            display: none !important;
+            position: absolute; 
+        }
+        .card {
+            grid-column: auto;
+            width: 100%;
+        }
+        #image-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.9); z-index: 9999; justify-content: center; align-items: center;
+        }
+        #image-overlay img { max-width: 95%; max-height: 95%; }
+
+        .tabs-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            position: sticky; 
+            top: 0;
+            z-index: 1000;
+            background-color: var(--bg-color);
+            padding: 10px 0;
+        }
+
+        .tab-button {
+            padding: 12px 24px; font-size: 1.2rem; font-weight: bold; cursor: pointer;
+            border: none; border-radius: 8px; background-color: #d1d1d1; color: #555; transition: all 0.3s;
+        }
+        .tab-button.active { background-color: #2782dc; color: white; box-shadow: 0 4px 10px rgba(39, 130, 220, 0.4); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Grid Column Overrides */
+        #grid_ADCmax { grid-template-columns: repeat(3, 1fr) !important; }
+        #grid_BM_ChADC_1D, #grid_Clustering_Track_All_Cal, #grid_BM_ADC_Tracked_1D, #grid_BM_ADC_Tracked_1D_Cal,#grid_Clustering_Res_Summary_Cal { 
+            grid-template-columns: repeat(1, 1fr) !important; width: 100%; 
+        }
+        #grid_Clustering_Track_Detail, #grid_Clustering_Track_Detail_Cal { 
+            grid-template-columns: repeat(4, 1fr) !important; width: 100%; 
+        }
+        #grid_BeamProfile_TDep, #grid_BeamProfile, #grid_BeamProfile_Cal, #grid_BeamProfile_Cor, 
+        #grid_BeamProfile_Cor_Cal, #grid_Beam_Direction_Cal, #grid_Beam_Direction, #grid_Pos_RSD, 
+        #grid_Pos_RSD_Cal, #grid_nH_Track, #grid_nH_Track_Cal, #grid_nH {
+            grid-template-columns: repeat(3, 1fr) !important; width: 100%;
+        }
+        
+        /* --- 懸浮導覽列樣式 --- */
+        #float-nav-btn {
+            position: fixed;
+            top: 0%; /* 畫面垂直 1/3 處 */
+            right: 0;
+            z-index: 10001;
+            width: 40px;
+            height: 50px;
+            background-color: #2782dc;
+            color: white;
+            border-radius: 8px 0 0 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: -2px 2px 5px rgba(0,0,0,0.3);
+            font-size: 20px;
+            transition: width 0.3s ease;
+        }
+        #float-nav-btn:hover {
+            width: 50px;
+            background-color: #1b63a8;
+        }
+
+        #float-nav-panel {
+            position: fixed;
+            top: 0%;
+            right: 50px; /* 在按鈕左邊 */
+            width: 250px;
+            max-height: 90vh;
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid #2782dc;
+            border-radius: 8px;
+            padding: 15px;
+            overflow-y: auto;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            z-index: 10000;
+            display: none; /* 預設隱藏 */
+            flex-direction: column;
+        }
+        #float-nav-panel.show { display: flex; }
+        
+        .nav-section-title { font-size: 14px; color: #999; margin-bottom: 5px; font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 3px; }
+        .nav-item { 
+            display: block; padding: 6px 10px; margin-bottom: 4px; 
+            text-decoration: none; color: #444; border-radius: 4px; 
+            font-size: 14px; cursor: pointer; transition: background 0.2s;
+        }
+        .nav-item:hover { background-color: #f0f7ff; color: #2782dc; }
+        .nav-item.active { background-color: #2782dc; color: white; }
+        
+        /* 次級標題連結樣式 */
+        .sub-link {
+            padding-left: 15px;
+            border-left: 3px solid #ddd;
+            font-size: 13px;
+        }
+        .sub-link:hover { border-left-color: #2782dc; }
+
+    </style>
+    
+    <script>
+        const detN = ["LYSO-SiPM","LYSO","BM1","BM2","PbWO"], detSN = ["D0","D1","T1","T2","D2"];
+        
+        window.toggleMode = function(btn, pathNormal, pathMM, Mode1 = "Mode: mm", Mode2 = "Mode: Normal") {
+            const card = btn.closest('.card');
+            const img = card.querySelector('.main-img');
+            const pathDisplay = card.querySelector('.card-path');
+            const isModeMM = img.src.includes(pathMM.replace('./', ''));
+
+            if (!isModeMM) {
+                img.src = pathMM; pathDisplay.innerText = pathMM;
+                btn.innerText = Mode1; btn.classList.add('active');
+            } else {
+                img.src = pathNormal; pathDisplay.innerText = pathNormal;
+                btn.innerText = Mode2; btn.classList.remove('active');
+            }
+        };
+
+        document.addEventListener('click', function(e) {
+            if (e.target.tagName === 'IMG' && e.target.closest('.card')) {
+                const overlay = document.getElementById('image-overlay');
+                document.getElementById('overlay-img').src = e.target.src;
+                overlay.style.display = 'flex';
+            }
+            // 點擊面板外部時關閉導覽列
+            if (!e.target.closest('#float-nav-panel') && !e.target.closest('#float-nav-btn')) {
+                document.getElementById('float-nav-panel').classList.remove('show');
+            }
+        });
+        
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            
+            const targetContent = document.getElementById(tabId);
+            targetContent.classList.add('active');
+            
+            // 找到對應的頂部按鈕並設為 active
+            const targetBtn = Array.from(document.querySelectorAll('.tab-button')).find(b => b.getAttribute('onclick').includes(tabId));
+            if(targetBtn) targetBtn.classList.add('active');
+            
+            window.scrollTo({ top: 0 });
+            
+            // 更新懸浮導覽列內容
+            updateNav(tabId);
+        }
+
+        // --- 懸浮導覽列邏輯 ---
+        function toggleNav() {
+            const panel = document.getElementById('float-nav-panel');
+            panel.classList.toggle('show');
+        }
+
+        function updateNav(activeTabId) {
+            const panel = document.getElementById('float-nav-panel');
+            panel.innerHTML = ''; // 清空舊內容
+
+            // 1. 建立分頁切換區
+            const sectionTabs = document.createElement('div');
+            sectionTabs.innerHTML = '<div class="nav-section-title">Page selection</div>';
+            
+            const tabs = [
+                {id: 'raw-part', name: 'Raw Data'},
+                {id: 'matched-part', name: 'Matched Result'},
+                {id: 'cali-part', name: 'Calibrated Result'},
+                {id: 'Summary', name: 'Summary'}
+            ];
+
+            tabs.forEach(tab => {
+                const link = document.createElement('div');
+                link.className = `nav-item ${tab.id === activeTabId ? 'active' : ''}`;
+                link.innerText = tab.name;
+                link.onclick = () => { switchTab(tab.id); }; // 切換分頁但不關閉面板，方便繼續點次標題
+                sectionTabs.appendChild(link);
+            });
+            panel.appendChild(sectionTabs);
+
+            // 2. 建立當前頁面內容索引 (次標題)
+            const activeContent = document.getElementById(activeTabId);
+            const headers = activeContent.querySelectorAll('h3');
+            
+            if (headers.length > 0) {
+                const sectionSub = document.createElement('div');
+                sectionSub.style.marginTop = '15px';
+                sectionSub.innerHTML = '<div class="nav-section-title">Study target</div>';
+                
+                headers.forEach((h3, index) => {
+                    // 確保每個 h3 都有 ID 供跳轉
+                    if (!h3.id) h3.id = `${activeTabId}-h3-${index}`;
+                    
+                    const subLink = document.createElement('div');
+                    subLink.className = 'nav-item sub-link';
+                    subLink.innerText = h3.innerText;
+                    subLink.onclick = () => {
+                        h3.scrollIntoView({ behavior: 'auto', block: 'start' });
+                        // 手機版可能希望點了就關閉，電腦版可保留
+                        // panel.classList.remove('show'); 
+                    };
+                    sectionSub.appendChild(subLink);
+                });
+                panel.appendChild(sectionSub);
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            updateNav('raw-part'); // 預設載入第一個分頁的導覽
+        });
+
+    </script>
+</head>
+<body>
+    
+    <header style="margin-bottom: 30px;">
+        <h1 style="color: #27dcbe; margin-bottom: 5px; margin-top: 5px; font-size: 5.0rem;">Feb 2025 Beam Test Data Analysis</h1>
+        <h1 style="color: #2782dc; margin-bottom: 5px; margin-top: 5px; font-size: 4.0rem;">PbWO+SiPM Energy Scan</h1>            
+        <h4 style="color: #5e68f5; font-size: 1.5rem;">The_Run_Infos_file</h4>
+        <hr style="border: 0; border-top: 2px solid #93a3fe;">
+    </header>
+
+    <div class="tabs-container">
+        <button class="tab-button active" onclick="switchTab('raw-part')">1. Raw Data</button>
+        <button class="tab-button" onclick="switchTab('matched-part')">2. Matched Result</button>
+        <button class="tab-button" onclick="switchTab('cali-part')">3. Calibrated Result</button>
+        <button class="tab-button" onclick="switchTab('Summary')">Summary</button>
+    </div>
+
+    <div id="float-nav-btn" onclick="toggleNav()">◀</div>
+    <div id="float-nav-panel">
+        </div>
+
+    <div id="raw-part" class="tab-content active">
+        <h2>Raw Data Part</h2>
+        <h3>Hit Position</h3>
+        <div class="report-grid" id="grid_HitPosition"></div>
+        <h3>Hit Position on Time</h3>
+        <div class="report-grid" id="grid_BeamProfile_TDep"></div>
+        <h3>Channels ADC</h3>
+        <div class="report-grid" id="grid_BM_ChADC_1D"></div><br>
+        <div class="report-grid" id="grid_BM_ChADC_2D"></div><br>
+        <div class="report-grid" id="grid_ChADC"></div>
+        <h3>Hit multiplicity</h3>
+        <div class="report-grid" id="grid_nH"></div>
+    </div>
+
+    <div id="matched-part" class="tab-content">
+        <h2>Matched Result</h2>
+        <h3>Beam profile</h3>
+        <div class="report-grid" id="grid_BeamProfile"></div>
+        <h3>Beam profile Correlation</h3>
+        <div class="report-grid" id="grid_BeamProfile_Cor"></div>
+        <h3>Beam Direction</h3>
+        <div class="report-grid" id="grid_Beam_Direction"></div>
+        <h3>Position Residual, and Resoution</h3>
+        <div class="report-grid" id="grid_Pos_RSD"></div>
+        <h3>ADC of Tracked data</h3>
+        <div class="report-grid" id="grid_BM_ADC_Tracked_1D"></div><br>
+        <div class="report-grid" id="grid_BM_ADC_Tracked"></div><br>
+        <div class="report-grid" id="grid_ADC_Tracked"></div>
+        <h3>Energy Containment & Resolution</h3>
+        <div class="report-grid" id="grid_Clustering_Track"></div><br>
+        <div class="report-grid" id="grid_Clustering_Track_Detail"></div>
+        <h3>Reconstructed Hit multiplicity</h3>
+        <div class="report-grid" id="grid_nH_Track"></div>
+    </div>
+
+    <div id="cali-part" class="tab-content">
+        <h2>Calibrated Result</h2>
+        <h3>Beam profile(Cali.)</h3>
+        <div class="report-grid" id="grid_BeamProfile_Cal"></div>
+        <h3>Beam profile Correlation(Cali.)</h3>
+        <div class="report-grid" id="grid_BeamProfile_Cor_Cal"></div>
+        <h3>Beam Direction(Cali.)</h3>
+        <div class="report-grid" id="grid_Beam_Direction_Cal"></div>
+        <h3>Position Residual, and Resoution(Cali.)</h3>
+        <div class="report-grid" id="grid_Pos_RSD_Cal"></div>
+        <h3>ADC of Tracked data(Cali.)</h3>
+        <div class="report-grid" id="grid_BM_ADC_Tracked_1D_Cal"></div><br>
+        <div class="report-grid" id="grid_BM_ADC_Tracked_Cal"></div><br>
+        <div class="report-grid" id="grid_ADC_Tracked_Cal"></div><br>
+        <h3>Energy Containment & Resolution(Cali.)</h3>
+        <div class="report-grid" id="grid_Clustering_Track_Cal"></div><br>
+        <div class="report-grid" id="grid_Clustering_Track_Detail_Cal"></div><br>
+        <div class="report-grid" id="grid_Clustering_Track_All_Cal"></div>
+        <br>
+        <div class="report-grid" id="grid_Clustering_Res_Summary_Cal"></div>
+        <h3>Shower Spread</h3>
+        <div class="report-grid" id="grid_Shower_Spread_Cal"></div>
+        <h3>Reconstructed Hit multiplicity(Cali.)</h3>
+        <div class="report-grid" id="grid_nH_Track_Cal"></div>
+    </div>
+    
+    <div id="Summary" class="tab-content">
+        <h2>Summary</h2>
+        <h2>Calibrated Result</h2>
+        
+        <h3>Beam profile(Cali.)</h3>
+        
+        <h3>Beam profile Correlation(Cali.)</h3>
+        
+        <h3>Beam Direction(Cali.)</h3>
+        
+        <h3>Position Residual, and Resoution(Cali.)</h3>
+        
+        <h3>ADC of Tracked data(Cali.)</h3>
+        
+        <h3>Energy Containment & Resolution(Cali.)</h3>
+        
+        <h3>Shower Spread</h3>
+        <div class="report-grid"></div>
+    </div>
+
+    <div id="image-overlay" onclick="this.style.display='none'"><img src="" id="overlay-img"></div>
+
+    <div class="report-grid" id="grid_HitPosition">
+        <script>{
+            const grid = document.getElementById('grid_HitPosition');
+            const ids = [3,2]; const ids2 = [4]; let content = '';
+            ids.forEach(id => {
+                const p = "./graphRaw/HitVSPos_D" + id + ".gif";
+                content += `<div class="card"><div class="card-info"><div class="card-title">Hit on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+            ids.forEach(id => {
+                const p = "./graphRaw/HitVSPosH1_mm_D" + id + ".gif";
+                content += `<div class="card"><div class="card-info"><div class="card-title">Hit on ${detN[id]}, ${detSN[id]} ,1D</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+            ids2.forEach(id => {
+                const p = "./graphRaw/HitVSPos_mm_D" + id + ".gif";
+                content += `<div class="card"><div class="card-info"><div class="card-title">Hit on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+            ids2.forEach(id => {
+                const p = "./graphRaw/HitVSPosH1_1D_mm_D4.gif";
+                content += `<div class="card"><div class="card-info"><div class="card-title">Hit on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+            grid.innerHTML = content;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_BeamProfile_TDep">
+        <script>{
+            const grid = document.getElementById('grid_BeamProfile_TDep');
+            const id3s = [3, 2, 4]; let htmlContent = '';
+            id3s.forEach(id => {
+                const pN = `./graphRaw/TimeVSiXiY_D${id}.gif`; const pM = `./graphRaw/TimeVSiXiY_mm_D${id}.gif`;
+                htmlContent += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}')">Switch to mm</button><div class="card-info"><div class="card-title">Hit position on Time${detN[id]}, ${detSN[id]}</div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_BM_ChADC_1D">
+        <script>{
+            const ids = [3,2]; const grid = document.getElementById('grid_BM_ChADC_1D'); let content = '';
+            ids.forEach(id => {
+                const p = "./graphRaw/ADCVSCh_D" + id + ".gif";
+                content += `<div class="card"><div class="card-info"><div class="card-title">ADC dist on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+            grid.innerHTML = content;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_BM_ChADC_2D">
+        <script>{
+            const ids = [3,2]; const grid = document.getElementById('grid_BM_ChADC_2D'); let content = '';
+            ids.forEach(id => {
+                const p = "./graphRaw/iXiYVSGch_D" + id + ".gif";
+                content += `<div class="card"><div class="card-info"><div class="card-title">ADC dist on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+            grid.innerHTML = content;
+        }</script>
+    </div>
+    <div class="report-grid" id="grid_ChADC">
+        <script>{
+            const ids = [3,2]; const ids2 = [4]; const grid = document.getElementById('grid_ChADC'); let content = '';
+            ids2.forEach(id => {
+                const p = "./graphRaw/" + ("ADCMeanVSiXiY_D") + id + ".gif";
+                content += `<div class="card"><div class="card-info"><div class="card-title">ADC on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+            ids2.forEach(id => {
+                const p = "./graphRaw/" +"ADCVSCh_D" + id + ".gif";
+                content += `<div class="card"><div class="card-info"><div class="card-title">ADC on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+            grid.innerHTML = content;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_nH">
+        <script>{
+            const grid = document.getElementById('grid_nH'); const ids = [2,3,4];
+            ids.forEach(id => {
+                const p = "./graphRaw/HitVSnHit_D" + id + ".gif";
+                grid.innerHTML += `<div class="card"><div class="card-info"><div class="card-title">multiplicity on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_BeamProfile">
+        <script>{
+            const grid = document.getElementById('grid_BeamProfile');
+            const ids = [3, 2]; const id2s = [4]; const weights = ["_ADCM", "_ADCW", "_UNW"]; const Dims = ["", "_1D"]; let htmlContent = '';
+            Dims.forEach(Dim => {
+                ids.forEach(id => {
+                    weights.forEach(wt => {
+                        const pN = `./graphRec/HitVSPos${wt}${Dim}_D${id}.gif`; const pM = `./graphRec/HitVSPos${wt}${Dim}_mm_D${id}.gif`;
+                        const wtName = (wt === "_ADCM") ? "ADC<sub>max</sub>" : (wt === "_ADCW" ? "ADC Wt." : "Eq. Wt.");
+                        htmlContent += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}')">Switch to mm</button><div class="card-info"><div class="card-title">${detN[id]}, ${detSN[id]} (${wtName})</div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+                    });
+                });
+            });
+            grid.innerHTML += htmlContent;
+            let htmlContent2 = '';
+            Dims.forEach(Dim => {
+                id2s.forEach(id => {
+                    const wtZDC = "_ADCW";
+                    const pN = `./graphRec/HitVSPos${wtZDC}${Dim}_D${id}.gif`; const pM = `./graphRec/HitVSPos${wtZDC}${Dim}_mm_D${id}.gif`;
+                    const wtName =  "ADC Wt.";
+                    htmlContent2 += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}')">Switch to mm</button><div class="card-info"><div class="card-title">${detN[id]}, ${detSN[id]} (${wtName})</div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+                });
+            });
+            grid.innerHTML += htmlContent2;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_BeamProfile_Cor">
+        <script>{
+            const grid = document.getElementById('grid_BeamProfile_Cor');
+            const Combinations = [[2,3],[2,4],[3,4]]; const weights = ["_Wt", "_Unw"]; let htmlContent = '';
+            weights.forEach(wt => {
+                Combinations.forEach(([c1,c2]) => {
+                    const Com = `D${c1}toD${c2}`; const CaseName = `${detN[c1]} to ${detN[c2]}`;
+                    const pN = `./graphRec/Correlation_${Com}${wt}.gif`;
+                    const wtName = (wt === "_Wt" ? "ADC Wt." : "Eq. Wt.");
+                    htmlContent += `<div class="card"><div class="card-info"><div class="card-title">${CaseName}(${wtName})</div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+                });
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_Beam_Direction">
+        <script>{
+            const grid = document.getElementById('grid_Beam_Direction');
+            let htmlContent = ''; const weights = ["_ADCM", "_ADCW", "_UNW"];
+            weights.forEach(wt => {
+                const pD = `./graphRec/Direction${wt}_Transpose.gif`;
+                const wtName = (wt === "_ADCM") ? "ADC<sub>max</sub>" : (wt === "_ADCW" ? "ADC Wt." : "Eq. Wt.");
+                htmlContent += `<div class="card"><div class="card-info"><div class="card-title">Beam Direction(${wtName})</div><img src="${pD}" class="main-img"><div class="card-path">${pD}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_Pos_RSD">
+        <script>{
+            const grid = document.getElementById('grid_Pos_RSD');
+            let htmlContent = ''; const weights = ["_ADCM", "_ADCW", "_UNW"]; const Dimension = ["", "_2x1D"]; const id2s = [4];
+            id2s.forEach(id => {
+                Dimension.forEach((Dim,indDim) => {
+                    weights.forEach(wt => {
+                        const pD = `./graphRec/RSD_PosBMPDandZDCD${id}${Dim}${wt}.gif`; const pDC = `./graphRec/RSD_PosCBMPDandZDCD${id}${Dim}${wt}.gif`;
+                        const wtName = (wt === "_ADCM") ? "ADC<sub>max</sub>" : (wt === "_ADCW" ? "ADC Wt." : "Eq. Wt.");
+                        const butt = `<button class="unit-toggle" onclick="toggleMode(this, '${pD}', '${pDC}', 'Best combination', 'Full combination')">Full combination</button>`
+                        htmlContent += `<div class="card">${butt}<div class="card-info"><div class="card-title">X,Y Residual(${wtName}) on ${detN[id]}</div><img src="${pD}" class="main-img"><div class="card-path">${pD}</div></div></div>`;
+                    });
+                });
+                weights.forEach(wt => {
+                    const pD = `./graphRec/RSD_Pos_R${wt}_D${id}.gif`; const pDC = `./graphRec/RSD_Pos_R_PC${wt}_D${id}.gif`;
+                    const wtName = (wt === "_ADCM") ? "ADC<sub>max</sub>" : (wt === "_ADCW" ? "ADC Wt." : "Eq. Wt.");
+                    const butt = `<button class="unit-toggle" onclick="toggleMode(this, '${pDC}', '${pD}', 'w/o offset', 'w/ offset')">w/ offset</button>`
+                    htmlContent += `<div class="card">${butt}<div class="card-info"><div class="card-title">Position Resolution(${wtName})</div><img src="${pDC}" class="main-img"><div class="card-path">${pDC}</div></div></div>`;
+                });
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_BM_ADC_Tracked_1D">
+        <script>{
+            const grid = document.getElementById('grid_BM_ADC_Tracked_1D');
+            let htmlContent = ''; const id2s = [2,3];
+            id2s.forEach(id => {
+                const pN = `./graphRec/ADCVSCh_Track_D${id}.gif`; const pM = `./graphRec/ADCVSChGauge_Track_D${id}.gif`;
+                htmlContent += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}','Full Scale','Auto Scale')">Switch to auto</button><div class="card-info"><div class="card-title">Channels ADC on${detN[id]}, ${detSN[id]} </div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_BM_ADC_Tracked">
+        <script>{
+            const grid = document.getElementById('grid_BM_ADC_Tracked');
+            let htmlContent = ''; const id2s = [2,3];
+            id2s.forEach(id => {
+                const p2D = `./graphRec/ADCMeanVSiXiY_D${id}.gif`;
+                htmlContent += `<div class="card"><div class="card-info"><div class="card-title">Channels mean ADC on ${detN[id]}, ${detSN[id]}</div><img src="${p2D}" class="main-img"><div class="card-path">${p2D}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_ADC_Tracked">
+        <script>{
+            const grid = document.getElementById('grid_ADC_Tracked');
+            let htmlContent = ''; const id2s = [4];
+            id2s.forEach(id => {
+                const p2D = `./graphRec/ADCMeanVSiXiY_D${id}.gif`;
+                const pN = `./graphRec/ADCVSCh_Track_D${id}.gif`; const pM = `./graphRec/ADCVSChGauge_Track_D${id}.gif`;
+                htmlContent += `<div class="card"><div class="card-info"><div class="card-title">Crystal mean ADC on ${detN[id]}, ${detSN[id]}</div><img src="${p2D}" class="main-img"><div class="card-path">${p2D}</div></div></div>`;
+                htmlContent += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}','Full Scale','Auto Scale')">Switch to auto</button><div class="card-info"><div class="card-title">Crystal mean ADC on${detN[id]}, ${detSN[id]} </div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_Clustering_Track"> </div>
+    <div class="report-grid" id="grid_Clustering_Track_Detail"> </div>
+    <script>{
+        const ids = [4];
+        const grid = document.getElementById('grid_Clustering_Track');
+        const grids = document.getElementById('grid_Clustering_Track_Detail');
+        ids.forEach(id => {
+            const pE = `./graphRec/Clustering_Track_Spectrum_D${id}.gif`;
+            grid.innerHTML += `<div class="card"> <div class="card-info"> <div class="card-title">Lateral Energy Profile on ${detN[id]}, ${detSN[id]}</div> <img src="${pE}" class="main-img"> <div class="card-path">${pE} </div></div></div>`;
+            const pR = `./graphRec/Clustering_Track_Ratio_D${id}.gif`;
+            grid.innerHTML += `<div class="card"> <div class="card-info"> <div class="card-title">Shower shape on ${detN[id]}, ${detSN[id]}</div> <img src="${pR}" class="main-img"> <div class="card-path">${pR} </div></div></div>`;
+            const Clusterings = [["EMax","E<sub>max</sub>"],["E3x3","E<sub>3x3</sub>"],["E5x5","E<sub>5x5</sub>"],["EAll","E<sub>all</sub>"]]
+            Clusterings.forEach(([clus,latex]) => {
+                const pS = `./graphRec/Clustering_Track_Spectrum_${clus}_D${id}.gif`
+                grids.innerHTML += `<div class="card"> <div class="card-info"> <div class="card-title">${latex} on ${detN[id]}, ${detSN[id]}</div> <img src="${pS}" class="main-img"> <div class="card-path">${pS} </div></div></div>`;
+            });
+            const ShowerShapes = [["E11b33","E<sub>max</sub>/E<sub>3x3</sub>"],["E11b55","E<sub>max</sub>/E<sub>5x5</sub>"],["E11bAL","E<sub>max</sub>/E<sub>all</sub>"],["E33b55","E<sub>3x3</sub>/E<sub>5x5</sub>"]]
+            ShowerShapes.forEach(([clus,latex]) => {
+                const pS = `./graphRec/Clustering_Track_Ratio_${clus}_D${id}.gif`
+                grids.innerHTML += `<div class="card"> <div class="card-info"> <div class="card-title">${latex} on ${detN[id]}, ${detSN[id]}</div> <img src="${pS}" class="main-img"> <div class="card-path">${pS} </div></div></div>`;
+            });
+        });
+    }</script>
+
+    <div class="report-grid" id="grid_nH_Track">
+        <script>{
+            const grid = document.getElementById('grid_nH_Track');
+            const ids = [2,3,4];
+            ids.forEach(id => {
+                const p = "./graphRec/HitVSnHit_D" + id + ".gif";
+                grid.innerHTML += `<div class="card"><div class="card-info"><div class="card-title">multiplicity on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_BeamProfile_Cal">
+        <script>{
+            const grid = document.getElementById('grid_BeamProfile_Cal');
+            const ids = [3, 2]; const id2s = [4]; const weights = ["_ADCM", "_ADCW", "_UNW"]; const Dims = ["", "_1D"]; let htmlContent = '';
+            Dims.forEach(Dim => {
+                ids.forEach(id => {
+                    weights.forEach(wt => {
+                        const pN = `./graphCal/HitVSPos${wt}${Dim}_D${id}.gif`; const pM = `./graphCal/HitVSPos${wt}${Dim}_mm_D${id}.gif`;
+                        const wtName = (wt === "_ADCM") ? "ADC<sub>max</sub>" : (wt === "_ADCW" ? "ADC Wt." : "Eq. Wt.");
+                        htmlContent += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}')">Switch to mm</button><div class="card-info"><div class="card-title">${detN[id]}, ${detSN[id]} (${wtName})</div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+                    });
+                });
+            });
+            grid.innerHTML += htmlContent;
+            let htmlContent2 = '';
+            Dims.forEach(Dim => {
+                id2s.forEach(id => {
+                    const wtZDC = "_ADCW"; const pN = `./graphCal/HitVSPos${wtZDC}${Dim}_D${id}.gif`; const pM = `./graphCal/HitVSPos${wtZDC}${Dim}_mm_D${id}.gif`;
+                    const wtName =  "ADC Wt.";
+                    htmlContent2 += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}')">Switch to mm</button><div class="card-info"><div class="card-title">${detN[id]}, ${detSN[id]} (${wtName})</div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+                });
+            });
+            grid.innerHTML += htmlContent2;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_BeamProfile_Cor_Cal">
+        <script>{
+            const grid = document.getElementById('grid_BeamProfile_Cor_Cal');
+            const Combinations = [[2,3],[2,4],[3,4]]; const weights = ["_Wt", "_Unw"]; let htmlContent = '';
+            weights.forEach(wt => {
+                Combinations.forEach(([c1,c2]) => {
+                    const Com = `D${c1}toD${c2}`; const CaseName = `${detN[c1]} to ${detN[c2]}`;
+                    const pN = `./graphCal/Correlation_${Com}${wt}.gif`;
+                    const wtName = (wt === "_Wt" ? "ADC Wt." : "Eq. Wt.");
+                    htmlContent += `<div class="card"><div class="card-info"><div class="card-title">${CaseName}(${wtName})</div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+                });
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_Beam_Direction_Cal">
+        <script>{
+            const grid = document.getElementById('grid_Beam_Direction_Cal');
+            let htmlContent = ''; const weights = ["_ADCM", "_ADCW", "_UNW"];
+            weights.forEach(wt => {
+                const pD = `./graphCal/Direction${wt}_Transpose.gif`;
+                const wtName = (wt === "_ADCM") ? "ADC<sub>max</sub>" : (wt === "_ADCW" ? "ADC Wt." : "Eq. Wt.");
+                htmlContent += `<div class="card"><div class="card-info"><div class="card-title">Beam Direction(${wtName})</div><img src="${pD}" class="main-img"><div class="card-path">${pD}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_Pos_RSD_Cal">
+        <script>{
+            const grid = document.getElementById('grid_Pos_RSD_Cal');
+            let htmlContent = ''; const weights = ["_ADCM", "_ADCW", "_UNW"]; const Dimension = ["", "_2x1D"]; const id2s = [4];
+            id2s.forEach(id => {
+                Dimension.forEach((Dim,indDim) => {
+                    weights.forEach(wt => {
+                        const pD = `./graphCal/RSD_PosBMPDandZDCD${id}${Dim}${wt}.gif`;
+                        const wtName = (wt === "_ADCM") ? "ADC<sub>max</sub>" : (wt === "_ADCW" ? "ADC Wt." : "Eq. Wt.");
+                        htmlContent += `<div class="card"><div class="card-info"><div class="card-title">X,Y Residual(${wtName}) on ${detN[id]}</div><img src="${pD}" class="main-img"><div class="card-path">${pD}</div></div></div>`;
+                    });
+                });
+                weights.forEach(wt => {
+                    const pD = `./graphCal/RSD_Pos_R${wt}_D${id}.gif`; const pDC = `./graphCal/RSD_Pos_R_PC${wt}_D${id}.gif`;
+                    const wtName = (wt === "_ADCM") ? "ADC<sub>max</sub>" : (wt === "_ADCW" ? "ADC Wt." : "Eq. Wt.");
+                    const butt = `<button class="unit-toggle" onclick="toggleMode(this, '${pDC}', '${pD}', 'w/o offset', 'w/ offset')">w/ offset</button>`
+                    htmlContent += `<div class="card">${butt}<div class="card-info"><div class="card-title">Position Resolution(${wtName})</div><img src="${pDC}" class="main-img"><div class="card-path">${pDC}</div></div></div>`;
+                });
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_BM_ADC_Tracked_1D_Cal">
+        <script>{
+            const grid = document.getElementById('grid_BM_ADC_Tracked_1D_Cal');
+            let htmlContent = ''; const id2s = [2,3];
+            id2s.forEach(id => {
+                const pN = `./graphCal/ADCSumVSiXiY_Track_D${id}.gif`; const pM = `./graphCal/ADCSumVSiXiYGauge_Track_D${id}.gif`;
+                htmlContent += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}','Full Scale','Auto Scale')">Switch to auto</button><div class="card-info"><div class="card-title">Channels ADC on${detN[id]}, ${detSN[id]} </div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_BM_ADC_Tracked_Cal">
+        <script>{
+            const grid = document.getElementById('grid_BM_ADC_Tracked_Cal');
+            let htmlContent = ''; const id2s = [2,3];
+            id2s.forEach(id => {
+                const p2D = `./graphCal/ADCMeanVSiXiY_D${id}.gif`;
+                htmlContent += `<div class="card"><div class="card-info"><div class="card-title">Channels mean ADC on ${detN[id]}, ${detSN[id]}</div><img src="${p2D}" class="main-img"><div class="card-path">${p2D}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_ADC_Tracked_Cal">
+        <script>{
+            const grid = document.getElementById('grid_ADC_Tracked_Cal');
+            let htmlContent = ''; const id2s = [4];
+            id2s.forEach(id => {
+                const p2D = `./graphCal/ADCMeanVSiXiY_D${id}.gif`;
+                const pN = `./graphCal/ADCSumVSiXiY_Track_D${id}.gif`; const pM = `./graphCal/ADCSumVSiXiYGauge_Track_D${id}.gif`;
+                htmlContent += `<div class="card"><div class="card-info"><div class="card-title">Crystal mean ADC on ${detN[id]}, ${detSN[id]}</div><img src="${p2D}" class="main-img"><div class="card-path">${p2D}</div></div></div>`;
+                htmlContent += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}','Full Scale','Auto Scale')">Switch to auto</button><div class="card-info"><div class="card-title">Crystal mean ADC on${detN[id]}, ${detSN[id]} </div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_Clustering_Track_Cal"> </div>
+    <div class="report-grid" id="grid_Clustering_Track_Detail_Cal"> </div>
+        <script>{
+            const ids = [4];
+            const grid = document.getElementById('grid_Clustering_Track_Cal');
+            const grids = document.getElementById('grid_Clustering_Track_Detail_Cal');
+            ids.forEach(id => {
+                const pE = `./graphCal/Clustering_Track_E_D${id}.gif`; const pA = `./graphCal/Clustering_Track_A_D${id}.gif`;
+                grid.innerHTML += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pE}', '${pA}','Edep[MeV]','Cal.ADC')">Switch to Cal.ADC</button><div class="card-info"><div class="card-title">Lateral Energy Profile on ${detN[id]}, ${detSN[id]}</div><img src="${pE}" class="main-img"><div class="card-path">${pE}</div></div></div>`;
+                const pR = `./graphCal/Clustering_Track_Ratio_D${id}.gif`;
+                grid.innerHTML += `<div class="card"> <div class="card-info"> <div class="card-title">Shower shape on ${detN[id]}, ${detSN[id]}</div> <img src="${pR}" class="main-img"> <div class="card-path">${pR} </div></div></div>`;
+                const Clusterings = [["1x1","E<sub>max</sub>"],["3x3","E<sub>3x3</sub>"],["5x5","E<sub>5x5</sub>"],["All","E<sub>all</sub>"]]
+                Clusterings.forEach(([clus,latex]) => {
+                    const pES = `./graphCal/Clustering_Track_E${clus}_D${id}.gif`; const pAS = `./graphCal/Clustering_Track_A${clus}_D${id}.gif`;
+                    grids.innerHTML += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pES}', '${pAS}','Edep[MeV]','Cal.ADC')">Switch to Cal.ADC</button><div class="card-info"><div class="card-title">${latex} on ${detN[id]}, ${detSN[id]}</div><img src="${pES}" class="main-img"><div class="card-path">${pES}</div></div></div>`;
+                });
+                const ShowerShapes = [["E11b33","E<sub>max</sub>/E<sub>3x3</sub>"],["E11b55","E<sub>max</sub>/E<sub>5x5</sub>"],["E11bAL","E<sub>max</sub>/E<sub>all</sub>"],["E33b55","E<sub>3x3</sub>/E<sub>5x5</sub>"]]
+                ShowerShapes.forEach(([clus,latex]) => {
+                    const pS = `./graphCal/Clustering_Track_Ratio_${clus}_D${id}.gif`
+                    grids.innerHTML += `<div class="card"> <div class="card-info"> <div class="card-title">${latex} on ${detN[id]}, ${detSN[id]}</div> <img src="${pS}" class="main-img"> <div class="card-path">${pS} </div></div></div>`;
+                });
+            });
+        }</script>
+        
+    </div>
+    <br>
+    <div class="report-grid" id="grid_Clustering_Track_All_Cal"> 
+        <script>{
+            const grid = document.getElementById('grid_Clustering_Track_All_Cal');
+            let htmlContent = ''; const id2s = [4];
+            id2s.forEach(id => {
+                const pE = `./graphCal/Clustering_Track_EClus_D${id}.gif`; const pA = `./graphCal/Clustering_Track_AClus_D${id}.gif`;
+                htmlContent += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pE}', '${pA}','Edep[MeV]','Cal.ADC')">Switch to Cal.ADC</button><div class="card-info"><div class="card-title">All kind of Clustering ${detN[id]}, ${detSN[id]}</div><img src="${pE}" class="main-img"><div class="card-path">${pE}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+    <div class="report-grid" id="grid_Clustering_Res_Summary_Cal"> 
+        <script>{
+            const grid = document.getElementById('grid_Clustering_Res_Summary_Cal');
+            let htmlContent = ''; const id2s = [4];
+            id2s.forEach(id => {
+                const p2D = `./graphCal/Resolution_Comp_A_vs_E_D${id}.gif`;
+                htmlContent += `<div class="card"><div class="card-info"><div class="card-title">Resolution comparison on ${detN[id]}, ${detSN[id]}</div><img src="${p2D}" class="main-img"><div class="card-path">${p2D}</div></div></div>`;
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+
+    <div class="report-grid" id="grid_Shower_Spread_Cal"> 
+        <script>{
+            const grid = document.getElementById('grid_Shower_Spread_Cal');
+            let htmlContent = '';
+            const id2s = [4]; const Dims = [["_2D","2D"], ["_2x1D","1D-Proj."], ["","2D & 1D-Proj."],["_1D","Edep distribution"]];
+            id2s.forEach(id => {
+                Dims.forEach(([Dim,name]) => {
+                    const pN = `./graphCal/ShowerProfile${Dim}_D${id}.gif`; const pM = `./graphCal/ShowerProfile${Dim}_mm_D${id}.gif`;
+                    htmlContent += `<div class="card"><button class="unit-toggle" onclick="toggleMode(this, '${pN}', '${pM}')">Switch to mm</button><div class="card-info"><div class="card-title">${name} ${detN[id]}, ${detSN[id]}</div><img src="${pN}" class="main-img"><div class="card-path">${pN}</div></div></div>`;
+                });
+            });
+            grid.innerHTML += htmlContent;
+        }</script>
+    </div>
+    
+    <div class="report-grid" id="grid_nH_Track_Cal">
+        <script>{
+            const grid = document.getElementById('grid_nH_Track_Cal');
+            const ids = [2,3,4];
+            ids.forEach(id => {
+                const p = "./graphCal/HitVSnHit_D" + id + ".gif";
+                grid.innerHTML += `<div class="card"><div class="card-info"><div class="card-title">multiplicity on ${detN[id]}, ${detSN[id]}</div><img src="${p}" class="main-img"><div class="card-path">${p}</div></div></div>`;
+            });
+        }</script>
+    </div>
+
+</body>
+</html>
