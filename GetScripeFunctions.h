@@ -85,13 +85,14 @@ map< pair<string, string> , vector<string> > classifyDatas(
 
       if (regex_search(strtmp, match, run_pattern)) {
         run_number = match[1];
+        // cout<<run_number<<endl;
       }
 
       if (regex_search(strtmp, match, time_pattern)) {
         timestamp_str = match[1].str();
         timestamp_str = timestamp_str.substr(0, 10);
       }
-
+      // cout<<run_number.empty() <<"||"<< timestamp_str.empty()<<endl;
       if (run_number.empty() || timestamp_str.empty()) continue;
 
       // 將 HHMMSS.ms 轉為秒數方便比較
@@ -99,7 +100,7 @@ map< pair<string, string> , vector<string> > classifyDatas(
       double M = stod(timestamp_str.substr(2,2));
       double S = stod(timestamp_str.substr(4));
       double t_in_sec = H*3600 + M*60 + S;
-
+      // cout<<run_number<<" "<<t_in_sec<<" "<<timestamp_str<<" "<<strtmp<<" "<<i<<endl;
       entries.push_back({run_number, t_in_sec, timestamp_str, strtmp, i});
     }
     in.close();

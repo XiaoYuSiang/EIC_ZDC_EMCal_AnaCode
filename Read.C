@@ -40,8 +40,8 @@ string defaultNameRootMD2   = "";
 int processID = 0b00100;
 //^^^^^^^^^^^^change this path and the file name without extentio
 // int iDetArr[4] = {0,2,3,-1};
-int iDetArr[4] = {1,2,3,4};
-string SymbolFile[4] = {"D1","T1","T2","D2"};
+int iDetArr[4] = {4,2,3,-1};
+string SymbolFile[4] = {"D2","T1","T2","D1"};
 
   /*Example of files path name*/
 //The case file is path/CaseString_hhmmss.bin
@@ -68,8 +68,15 @@ bool ChechName(string &NAME){
   if(NAME=="") return false;
   if (NAME.size() >= 4 && NAME.substr(NAME.size() - 4) == ".bin") 
     NAME = NAME.substr(0, NAME.size() - 4);
+  ifstream f(NAME+string(".bin"));
+  if (!f.good()) {
+    cout << "File: "<<NAME<<".bin is NOT found!\n";
+    f.close();
+    return false;
+  }
   return true;
 }
+char* sb(string str){return Form("\\\"%s\\\"",str.data());};
 void Read(
   string NameRoot = defaultNameRoot,
   string NameRootMD1 = defaultNameRootMD1,
@@ -108,112 +115,132 @@ void Read(
   cout<<((process>>4)%2)<<((process>>3)%2)<<((process>>2)%2);
   cout<<((process>>1)%2)<<((process>>0)%2)<<endl;
   
-  gSystem->SetBuildDir("./tmpdir/", kTRUE);
   // throw;
-  const int NScripes = 5;
-  string scripeNames[NScripes] = {"BinToHex","SelectScidata","DecodeSciRaw","ReConstruct","DrawADC"};
+  /*
+  gSystem->SetBuildDir("./tmpdir/", kTRUE);
+  vector<string> scripeNames = {
+    "BinToHex","SelectScidata","DecodeSciRaw","Decoding",
+    "ReConstruct","OverwriteBranch",
+    "DrawADC","DrawADCRec","DrawADCRecCalv2",
+    "DrawTriggerLinesCenterCal","DrawTriggerLinesCenter"
+  };
   if(false){
     string cmdline = "";
-    for(int i=0; i <NScripes;i++)
+    for(int i=0; i <scripeNames.size();i++)
       cmdline+=string(Form("\(root -l -b -q %s.C+)&",scripeNames[i].data()));
     cmdline +="wait";
     system(cmdline.data());
+    cout<<cmdline<<endl;
+  }*/
+  ofstream offInfo((dirAnaPath+"The_Run_Infos_file.dat").data());
+  int posRun = int(NameRoot.rfind("Run")), runIndex;
+  string RunName;
+  if( posRun!=-1 ){
+    RunName = NameRoot.substr(posRun+3,NameRoot.find("_",posRun)-posRun-3);
+    runIndex = stoi(RunName);
+    RunName = Form("Run%06.0f",runIndex*1.);
+    offInfo<<"Run: "<<runIndex<<endl;
+    offInfo.close();
+  }else{
+    cout<<"The File without the run number!!!"<<endl;
+    cout<<"Fail to do the analysis!!!"<<endl;
+    throw;
   }
-  if((process>>4)%2){
-    string cmdline = "";
-    for(int i=0; i <4;i++){
-      if(FileCheck[i]) cmdline+=string(Form("\(root -l -b -q BinToHex.C+\\(\\\"%s\\\",\\\"%s\\\"\\))&",SourceFileNameBin[i].data(),SourceFileNameHex[i].data()));
-    }
-    cmdline +="wait";
-    system(cmdline.data());
-  }
-  if((process>>3)%2){
+  
+  if((process>>3)%2&&(process>>4)%2){
     // SelectScidata(SourceFileNameHex.data(),HexRawSciFileName.data());
     string cmdline = "";
     for(int i=0; i <4;i++){
       if(FileCheck[i]) 
-        cmdline+=string(Form("root -l -b -q SelectScidata.C+\\(\\\"%s\\\",\\\"%s\\\"\\)&",SourceFileNameHex[i].data(),HexRawSciFileName[i].data()));
+        cmdline+=string(Form("root -l -b -q FastBinDecoding.C+\\(%s,%s\\)&",
+                        sb(SourceFileNameHex[i]),sb(HexRawSciFileName[i])));
     }
     cmdline +="wait";
     system(cmdline.data());
+  }else{
+    if((process>>4)%2){
+      string cmdline = "";
+      for(int i=0; i <4;i++){
+        if(FileCheck[i]) cmdline+=string(Form("\(root -l -b -q BinToHex.C+\\(%s,%s\\))&",
+          sb(SourceFileNameBin[i]),sb(SourceFileNameHex[i])));
+      }
+      cmdline +="wait";
+      system(cmdline.data());
+    }
+    if((process>>3)%2){
+      // SelectScidata(SourceFileNameHex.data(),HexRawSciFileName.data());
+      string cmdline = "";
+      for(int i=0; i <4;i++){
+        if(FileCheck[i]) 
+          cmdline+=string(Form("root -l -b -q SelectScidata.C+\\(%s,%s\\)&",
+                          sb(SourceFileNameHex[i]),sb(HexRawSciFileName[i])));
+      }
+      cmdline +="wait";
+      system(cmdline.data());
+    }
   }
   if((process>>2)%2){
     // Load sensor mapping (1) = quiet. (0) shows mapping
-    // DecodeSciRaw(HexRawSciFileName.data(),ReadableRawSciFileNameT.data(),ReadableRawSciFileNameR.data(),NameRoot.data());
     string cmdline = "";
     for(int i=0; i <4;i++){
       if(FileCheck[i]) 
-        cmdline+=string(Form("root -l -b -q Decoding.C+\\(\\\"%s\\\",\\\"%s\\\",\\\"%s\\\",\\\"%s\\\",%d\\)&",HexRawSciFileName[i].data(),ReadableRawSciFileNameT[i].data(),ReadableRawSciFileNameR[i].data(),NameRoot.data(),iDetArr[i]));
-      
+        cmdline+=string(Form("root -l -b -q Decoding.C+\\(%s,%s,%s,%s,%d\\)&",
+                        sb(HexRawSciFileName[i]),sb(ReadableRawSciFileNameT[i]),
+                        sb(ReadableRawSciFileNameR[i]),sb(NameRoot),iDetArr[i]));
     }
     cmdline +="wait";
+    // cout<<cmdline.data()<<endl; throw;
     system(cmdline.data());
-    if( int(NameRoot.rfind("Run"))!=-1 ){
-      string RunName = NameRoot.substr(NameRoot.rfind("Run"),6);
-      
+    int posRun = int(NameRoot.rfind("Run"));
+    if( posRun!=-1 ){
+      string RunName = NameRoot.substr(posRun+3,NameRoot.find("_",posRun)-posRun-3);
+      int runIndex = stoi(RunName);
       for(int i=0; i <4;i++){
         if(FileCheck[i]){
-          system(Form("cp %s/%s_Sci.root %s/%s_%s_Sci.root",NameRoot.data(),SymbolFile[i].data(),NameRoot.data(),RunName.data(),SymbolFile[i].data()));
-
+          system(Form("ln -s %s/%s_Sci.root %s/Run%s_%s_Sci.root",
+                          NameRoot.data(),SymbolFile[i].data(),
+                          NameRoot.data(),RunName.data(),SymbolFile[i].data()));
         }
       }
     }
-    // ofstream ofsLog(Form("%s/SyncLog.dat",NameRoot.data()));
-    // for(int i=0;i<4;i++){
-      // if(FileCheck[i]){
-        // ifstream in(Form("%s/ConvertProblem_DID%d",NameRoot.data(),iDetArr[i]));
-        // string strtmp;
-        // in>>strtmp;
-        // cout<<Form("%s/ConvertProblem_DID%d.dat",NameRoot.data(),iDetArr[i])<<endl;
-        // cout<<strtmp<<endl;
-        // ofsLog<<strtmp<<endl;
-      // }
-    // }
-    // ofsLog.close();
-    // system(Form("sleep 0 &&root -l -b -q HLGScale.C+\\(\\\"%s\\\",\\\"%s\\\"\\)",dirAnaPath.data(),fileName.data()));
-    // throw;
   }
   if((process>>1)%2){
-    system(Form("sleep 0 &&root -l -b -q ReConstruct.C+\\(\\\"%s\\\",\\\"%s\\\",%d\\)",dirAnaPath.data(),fileName.data(),0));
-    // cout<<"Finish process>>1 == true"<<endl;
-    // system(Form("sleep 0 &&root -l -b -q DrawADC.C+\\(\\\"%s\\\",\\\"%s\\\"\\)",dirAnaPath.data(),fileName.data()));
-    // system(Form("sleep 0 &&root -l -b -q HLGScale.C+\\(\\\"%s\\\",\\\"%s\\\"\\)",dirAnaPath.data(),fileName.data()));
-    // throw;  
-    string reconData = dirAnaPath+fileName+"_ReCon.root";
-    system(Form("root -l -b -q DrawTriggerLinesCenter.C+\\(\\\"%s\\\",\\\"%sgraph/\\\"\\)",reconData.data(),dirAnaPath.data()));
-    // system(Form("root -l -b -q DrawESpectrum.C+\\(\\\"%s\\\",\\\"%s\\\"\\)",reconData.data(),dirAnaPath.data()));
+    system(Form("root -l -b -q ReConstruct.C+\\(%s,%s,%d\\)",sb(dirAnaPath),sb(fileName),true));
 
   }
-  // ReCombineADC(dirAnaPath.data(),fileName.data());
-  // system(Form("root -l -b -q PackageTestV2.C+\\(\\\"%s/\\\",\\\"%s\\\"\\)",NameRoot.data(),fileName.data()));
-  // system(Form("root -l -b -q PackageTestReEnergy.C+\\(\\\"%s/\\\",\\\"%s\\\"\\)",NameRoot.data(),fileName.data()));
-  // system(Form("root -l -b -q match.C+\\(\\\"%s\\\",\\\"%s\\\"\\)&",NameRoot.data(),fileName.data()));
-  // system(Form("root -l -b -q ShowEdepVsPeakChannel.C+\\(\\\"%s\\\",\\\"%s\\\"\\)&",NameRoot.data(),fileName.data()));
-  
-  // DrawEnerCollRatio(dirAnaPath.data(),fileName.data());
-  // DrawEnerCollRatio2(dirAnaPath.data(),fileName.data());
-  
- // throw; // test break line
-  // system(Form("sleep 0 &&root -l -b -q PositionEnergy.C+\\(\\\"%s\\\",\\\"%s\\\"\\)&",NameRoot.data(),fileName.data()));
-  // system(Form("sleep 0 &&root -l -b -q PositionEnergy2.C+\\(\\\"%s\\\",\\\"%s\\\"\\)&",NameRoot.data(),fileName.data()));
   if((process>>0)%2){
-    // system(Form("sleep 0 &&root -l -b -q FitPeakCode.C+\\(\\\"%s\\\"\\)&",dirAnaPath.data()));
-    // system(Form("sleep 0 &&root -l -b -q ADCShow2.C+\\(\\\"%s\\\",\\\"%s\\\"\\)&",NameRoot.data(),fileName.data()));
-    // system(Form("sleep 0 &&root -l -b -q FindFirstBin.C\\(\\\"%s\\\"\\)&",dirAnaPath.data()));
-    
-    string cmdlineDrawADC = "";
-    for(int i=0; i <4;i++){
-      if(FileCheck[i]) 
-        cmdlineDrawADC+=string(Form("(root -l -b -q DrawADC.C+\\(\\\"%s\\\",\\\"%s\\\",%d\\))&",dirAnaPath.data(),SymbolFile[i].data(),iDetArr[i]));
-    }
-    cmdlineDrawADC +="wait";
-    system(cmdlineDrawADC.data());
-    system(Form("(root -l -b -q DrawADCRec.C+\\(\\\"%s\\\",\\\"%s\\\",%d\\))&",dirAnaPath.data(),fileName.data(),1));
-    system(Form("python stack_graphs.py %s/HitVSPos_D%d.png %s/HitVSPos_D%d.png %s/HitVSPos_D%d.png %s/BeamProfile_All.png",dirAnaPath.data(),1,dirAnaPath.data(),2,dirAnaPath.data(),3,dirAnaPath.data()));
-    system(Form("python /data4/YuSiang/personalLib/Graph/SortGraph.py %s/Emax_D%d.png %s/Emax_D%d.png %s/Emax_D%d.png 3 1 %s/Emax_All.png",dirAnaPath.data(),1,dirAnaPath.data(),2,dirAnaPath.data(),3,dirAnaPath.data()));
+    // cout<<185<<endl;
+    system(Form("(root -l -b -q DrawADC.C+\\(%s\\))&",sb(dirAnaPath)));
+    system(Form("(root -l -b -q DrawMonitering.C+\\(%s\\))&",sb(dirAnaPath)));
+    system(Form("(root -l -b -q DrawADCRec.C+\\(%s,%s\\))&",
+                sb(dirAnaPath),sb(fileName)));
+    system(Form("root -l -b -q OverwriteBranch.C+\\(%s,%s,%d\\)",
+                sb(dirAnaPath),sb(fileName+"_ReCon"),4));
+    system(Form("root -l -b -q SortCalData.C+\\(%s,%s\\)",
+                sb(dirAnaPath),sb(fileName+"_ReCon")));
+    system(Form("root -l -b -q DrawTriggerLinesCenterCal.C+\\(%s,%s\\)&",
+                sb(dirAnaPath),sb(fileName)));
+    system(Form("root -l -b -q DrawTriggerLinesCenter.C+\\(%s,%s,%d\\)&",
+                sb(dirAnaPath),sb(fileName),4));
+    system(Form("(root -l -b -q DrawADCRecCalv2.C+\\(%s,%s\\))",
+                sb(dirAnaPath),sb(fileName)));
+    system(Form("(root -l -b -q DrawEResolution.C+\\(%s\\))",
+                sb(dirAnaPath)));
+                
+    // system(Form("python stack_graphs.py %s/HitVSPos_D%d.png %s/HitVSPos_D%d.png %s/HitVSPos_D%d.png %s/BeamProfile_All.png",dirAnaPath.data(),1,dirAnaPath.data(),2,dirAnaPath.data(),3,dirAnaPath.data()));
+    // system(Form("python /data4/YuSiang/personalLib/Graph/SortGraph.py %s/Emax_D%d.png %s/Emax_D%d.png %s/Emax_D%d.png 3 1 %s/Emax_All.png",dirAnaPath.data(),1,dirAnaPath.data(),2,dirAnaPath.data(),3,dirAnaPath.data()));
     // cout<<(Form("python stack_graphs.py %sHitVSPos_D%d.png %sHitVSPos_D%d.png %sHitVSPos_D%d.png %soutput.png",dirAnaPath.data(),1,dirAnaPath.data(),2,dirAnaPath.data(),3,dirAnaPath.data()));
   }
   // throw;
+  system(Form("cp ./RunDisplay.html %s",dirAnaPath.data()));
+  system(Form("root -l -b -q ExportToMHTML.C\\(%s,%s\\)",
+    sb(dirAnaPath+"/RunDisplay.html"),sb(dirAnaPath+"/RunDisplayMonofile.html")));
+  
+  system(Form("ln -s %s/RunDisplayMonofile.html %s/RunDisplay_%s.html"
+                      ,NameRoot.data(),NameRoot.data(),RunName.data()));
+  system(Form("ln -s %s/RunDisplayMonofile.html %s/../RunDisplay_%s.html"
+                      ,NameRoot.data(),NameRoot.data(),RunName.data()));
+
   system(Form("chmod 777 %s/*",dirAnaPath.data()));
   system(Form("chmod 777 %s",dirAnaPath.data()));
   system("wait\n echo \"Finish all graph\"");

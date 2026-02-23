@@ -8,22 +8,23 @@
 #include <algorithm>
 #include <map>
 #include <tuple>
+#include "GIDMapping.h"
 #if defined (__MAKECINT__) 
 #pragma link C++ class vector<Long64_t>+; 
 #endif
 #include <chrono>  // For timing
 
 using namespace std;
-const std::string fileMark[5] = {"D0", "D1", "T1", "T2", "D2"};
-const int DetSeq[5]={-1,2,1,0,3};
 // const bool bTrigger[5]={0,0,1,1,0};
 // const int MainDID = 4;
 // const int MainDZ  = 1;
 const double TestRate = 1;
-const bool bTrigger[5]={0,0,1,1,0};
-const int MainDID = 4;
-const int MainDZ  = 3;
-Long64_t  threshold = 1;
+const Long64_t  THRtcnt = 1;
+extern string SymbolFile[5];// = {"D0", "D1", "T1", "T2", "D2"};
+extern const int DetSeq[5];//={-1,-1,1,0,2};
+extern const bool bTrigger[5];//[5]={0,0,1,1,0};
+extern const int MainDID;// = 1;
+extern const int MainDZ;//  = 2;
 struct Event {
   vector<Long64_t> eNtryID;
   vector<Int_t> DID, pcnt, fcnt, ROCID;
@@ -125,7 +126,7 @@ void processFiles(
   size_t NTrees = 0;
   bool ACTreep[5]={0};
   for (int i = 0; i < 5; i++) {
-      std::string FilePathName = dirAnaPath + fileMark[i] + "_Sci.root";
+      std::string FilePathName = dirAnaPath + SymbolFile[i] + "_Sci.root";
       if (!checkFileExistence(FilePathName.data())) {
           std::cerr << "File " << FilePathName << " does not exist!" << std::endl;
           trees.push_back(NULL);
@@ -163,7 +164,7 @@ void processFiles(
 
   // Loop over the events and pair based on time differences
   map<Long64_t, Event> Events;
-  for (size_t i = 0; i < 5; ++i) cout<<(ACTreep[i])<<" "<<dirAnaPath + fileMark[i] + "_Sci.root"<<endl;
+  for (size_t i = 0; i < 5; ++i) cout<<(ACTreep[i])<<" "<<dirAnaPath + SymbolFile[i] + "_Sci.root"<<endl;
   for (size_t i = 0; i < 5; ++i) {
     if(!ACTreep[i]) continue;
     Long64_t EVS = trees[i]->GetEntries();
@@ -229,7 +230,7 @@ void processFiles(
 
       auto nextIt = std::next(it);
 
-      if (std::abs(nextIt->first - it->first) < threshold) {
+      if (std::abs(nextIt->first - it->first) < THRtcnt) {
         bool nextIsDuplicate = false;
 
         for (size_t j = 0; j < nextIt->second.ROCID.size() && !nextIsDuplicate; j++) {
@@ -336,6 +337,7 @@ void processFiles(
   Long64_t eID = 0;
   Int_t nROC[4]={0}; 
   int pcntEV, fcntEV, dfcntEV, nHitsEV[4]={0},nHitsAL= 0;
+  int iX0, iY0;
   vector<int>   ROCIDEV, channelEV, DIDEV, FireEV, iHitEV;
   vector<int>   ADCEV, GADCEV, GIDEV, iXEV, iYEV, iZEV;
   vector<float>  pXEV, pYEV, pZEV;
@@ -343,6 +345,7 @@ void processFiles(
   double GADC11, GADC33, GADCXs, GADC55, GADCAL;
   float CenpX, CenpY; 
   int    Cortex; 
+  vector<int>    DiX,DiY; 
   int PeakID = -1;
   TFile *fSave = new TFile((dirAnaPath+FileName+"_ReCon.root").data(),"recreate");
   TTree *tSave = new TTree("t","Tree of all detector data");
@@ -379,6 +382,10 @@ void processFiles(
   tSave->Branch("pX", &pXEV);
   tSave->Branch("pY", &pYEV);
   tSave->Branch("pZ", &pZEV);
+  tSave->Branch("iX0", &iX0);
+  tSave->Branch("iY0", &iY0);
+  tSave->Branch("DiX", &DiX);
+  tSave->Branch("DiY", &DiY);
   tSave->Branch("GADC11",&GADC11);
   tSave->Branch("GADC33",&GADC33);
   tSave->Branch("GADC55",&GADC55);
@@ -433,7 +440,6 @@ void processFiles(
       // ofEFF<<eID<<"\t"<<0<<endl;
       continue;
     }
-    // cout<<eID<<"\t"<<1<<endl;
     // ofEFF<<eID<<"\t"<<1<<endl;
     ofSave<<"--------------\nGieV = "<<i<<" / evs: "<<gEVS<<endl;
     // auto point1 = std::chrono::high_resolution_clock::now();
@@ -470,7 +476,7 @@ void processFiles(
         FireEV.push_back(Fire->at(iH));
         HGModeEV.push_back(HGMode->at(iH));
         ADCEV.push_back(ADC->at(iH)+250);
-        GADCEV.push_back(HGMode->at(iH)==1 ? (ADC->at(iH)+250) : (ADC->at(iH)+250)*10);
+        GADCEV.push_back((ADC->at(iH)+250)*10);
         GIDEV.push_back(GID->at(iH));
         iXEV.push_back(iX->at(iH));
         iYEV.push_back(iY->at(iH));
@@ -503,33 +509,37 @@ void processFiles(
     if(PeakID==-1){
       // cout<<500<<endl;
       ofSave<<"PeakID == -1"<<endl;
-      // for(size_t ihits=0;ihits<channelEV.size();ihits++){
-        // ofSave<<iHitEV[ihits]<<" "<<DIDEV[ihits]<<" "<<ROCIDEV[ihits]<<" "<<GIDEV[ihits]<<" "<<FireEV[ihits]<<" "<<ADCEV[ihits]<<" "<<GADCEV[ihits]<<endl;
-      // }
-        
     }else{
       // cout<<503<<endl;
-      GADC11 = GADCEV[PeakID],GADC33 = 0,GADCXs = 0,GADC55 = 0,GADCAL = 0;
+      GADC11 = 0,GADC33 = 0,GADCXs = 0,GADC55 = 0,GADCAL = 0;
       CenpX = 0; CenpY = 0;
-
-      int PeakiX = iXEV[PeakID];
-      int PeakiY = iYEV[PeakID];
-      // cout<<"origin: "<<PeakiX<<" "<<PeakiY<<" "<<PeakID<<endl;
+      iX0 = iXEV[PeakID];
+      iY0 = iYEV[PeakID];
+      
+      DiX.assign(nHitsAL, -9999);
+      DiY.assign(nHitsAL, -9999);
+      // cout<<"origin: "<<iX0<<" "<<iY0<<" "<<PeakID<<endl;
+      
       for(int iH=PeakID;iH<PeakID+nHitsEV[MainDZ];iH++){
         // cout<<iXEV[iH]<<" "<<iYEV[iH]<<endl;
         // CenpX += Esav->pX->at(i)*Esav->GADC->at(i);
         // CenpY += Esav->pY->at(i)*Esav->GADC->at(i);
-        int TmpiX = iXEV[iH];
-        int TmpiY = iYEV[iH];
+        int TmpiX = iXEV[iH]-iX0;
+        int TmpiY = iYEV[iH]-iY0;
+        DiX[iH] = TmpiX;
+        DiY[iH] = TmpiY;
         // cout<<"tmpos: "<<TmpiX<<" "<<TmpiY<<endl;
         int GADCTMP = GADCEV[iH];
         GADCAL+=GADCTMP;
-        if(abs(PeakiX-TmpiX)<3&&abs(PeakiY-TmpiY)<3){
+        if(abs(TmpiX)<3&&abs(TmpiY)<3){
           GADC55 += GADCTMP;
-          if(abs(PeakiX-TmpiX)<2&&abs(PeakiY-TmpiY)<2){
+          if(abs(TmpiX)<2&&abs(TmpiY)<2){
             GADC33 += GADCTMP;
-            if((abs(PeakiX-TmpiX) +abs(PeakiY-TmpiY))<2)
-              GADCXs += GADCTMP;
+            if((abs(TmpiX) +abs(TmpiY))<2){
+              GADCXs += GADCTMP; 
+              if((abs(TmpiX) +abs(TmpiY))==0)
+                GADC11 += GADCTMP;
+            }
           }
           CenpX += pXEV[iH]*GADCTMP;
           CenpY += pYEV[iH]*GADCTMP;
@@ -538,10 +548,10 @@ void processFiles(
       // cout<<GADC33<<" "<<GADC55<<endl;
       CenpX /= GADC55;
       CenpY /= GADC55;
-      Cortex = abs(PeakiX-3.5)>abs(PeakiY-3.5)
-          ? abs(PeakiX-3.5)-0.5 
-          : abs(PeakiY-3.5)-0.5;
-          
+      Cortex = abs(iX0-3.5)>abs(iY0-3.5)
+          ? abs(iX0-3.5)-0.5 
+          : abs(iY0-3.5)-0.5;
+      
       dfcntEV = (pcnt-pcntEV)*0.05+(fcnt-fcntEV)*0.24E-6;
       tSave->Fill();
       // tSave->FlushBaskets();
@@ -570,6 +580,8 @@ void processFiles(
     pXEV.clear();
     pYEV.clear();
     pZEV.clear();
+    DiX.clear();
+    DiY.clear();
     // auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(point1 - start).count();
     // auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(point3 - point1).count();
     // auto duration4 = std::chrono::duration_cast<std::chrono::milliseconds>(point4 - point3).count();
@@ -614,5 +626,6 @@ int ReConstruct(
 
 void ReConstruct() {
   cout<<"Finished compiling of ReConstruct.C+"<<endl;
-
+  // ReConstruct("/data8/ZDC/EMCal/PbWO4SiPM/AnaCode1/Save/EScanTypicalRuns/Run2021_HV17_VF650_650_x4_Pos145mm_-346mm_0mm_235159.437PbWO4/", "Run2021_HV17_VF650_650_x4_Pos145mm_-346mm_0mm_235159.437PbWO4");
+  
 }

@@ -1,0 +1,1428 @@
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <typeinfo>
+#include <algorithm>
+#include <sstream>
+#include <cmath>
+#include <map>
+#include <TF1.h>
+#include <TH1F.h>
+#include <TH1D.h>
+#include <TH3D.h>
+#include <TH2F.h>
+#include <TGraphErrors.h>
+#include <TGraphAsymmErrors.h>
+#include <TCanvas.h>
+#include <TChain.h>
+#include <TGraph.h>
+#include <TLegend.h>
+#include <TGaxis.h>
+#include <TText.h>
+#include <TFile.h>
+#include <TPad.h>
+#include <TTree.h>
+#include <TColor.h>
+#include <TStyle.h>
+#include <TPDF.h>
+#include <TPaveStats.h>
+#include <TH2D.h>
+#include <TString.h>
+#include <TROOT.h>
+#include <TStopwatch.h> // 加入計時器
+
+#include "./GIDMapping.h"
+#include "/data8/ZDC/EMCal/ShareScript/tdrstyle.h"
+#include "/data4/YuSiang/personalLib/RPU/DBMLayouts.h"
+#include "/data8/ZDC/EMCal/ShareScript/GrystalBallFitLibs.h"
+#include "/data4/YuSiang/personalLib/EFFTool/MemoryClear.h"
+
+using namespace std;
+
+// 全域變數保留
+std::vector<Int_t> *iX  = nullptr; // X 頻道索引 (1-based)
+std::vector<Int_t> *iY  = nullptr; // Y 頻道索引 (1-based)
+std::vector<Int_t> *fHit_DID = nullptr; // Detector ID (2 或 3)
+vector<string> WeightStr = {"EqGADC","1","(iHit==0)"};
+extern vector<TString> WtNames;
+extern vector<TString> sfWtNames;
+string dirGraph = "";
+string outTimeFile = "/data8/ZDC/EMCal/PbWO4SiPM/AnaCode1/TCADR.dat";
+
+void SetHistColor(TH1* h, int color){
+    h->SetLineColor(color);
+    h->SetMarkerColor(color);
+    h->SetLineWidth(2);
+}
+void SetFlineColor(TF1* f, int color){
+    f->SetLineColor(color);
+    f->SetLineWidth(2);
+    f->SetLineStyle(2);
+}
+
+TFile *fSaveHist;
+void SaveOrUpdate(TH1* h,string Tag = "") {
+  if (!fSaveHist || !h) return;
+  fSaveHist->cd(); // 切換到存檔目錄
+  h->Write(Form("%s%s",h->GetName(),Tag.data()), TObject::kOverwrite);
+}
+
+void GetADCRecCalSum( TTree *t,TH3* h3){
+  cout<<57<<endl;
+  std::vector<Int_t> *iX  = nullptr, *iY  = nullptr;  // Y 頻道索引
+  std::vector<Int_t> *DID  = nullptr;  // Y 頻道索引
+  std::vector<Double_t> *fHit_ADC = nullptr; // ADC 值
+  t->SetBranchAddress("iX",  &iX);
+  t->SetBranchAddress("iY",  &iY);
+  t->SetBranchAddress("DID",  &DID);
+  t->SetBranchAddress("EqGADC", &fHit_ADC); // 假設您的 ADC Branch 名稱
+  // cout<<63<<endl;
+  Long64_t nEntries = t->GetEntries();
+  for (Long64_t entry = 0; entry < nEntries; ++entry) {
+    // cout<<66<<endl;
+    t->GetEntry(entry);
+    if (!iX || iX->empty()) continue;
+    std::map<std::pair<int, int>, double> summed_adc_map;
+    size_t currentNHits = iX->size();
+    for (size_t i = 0; i < currentNHits; ++i){
+      if (fHit_ADC->at(i)<=0) continue;
+      if (DID->at(i)!=MainDID) continue;
+      summed_adc_map[{iX->at(i), iY->at(i)}] += fHit_ADC->at(i);
+    }
+    for (const auto& pair : summed_adc_map)
+      h3->Fill(pair.first.first, pair.first.second, pair.second);
+  }
+  t->ResetBranchAddresses(); 
+}
+void DrawADCRecCalv2( TTree *t, const int iDet){
+    ofstream ofssw(outTimeFile, std::ios::app);
+    TStopwatch sw;
+    sw.Start();
+    // [加速關鍵 1] 暫時關閉圖形顯示，只在記憶體中繪圖 (Batch Mode)
+    bool wasBatch = gROOT->IsBatch();
+    gROOT->SetBatch(kTRUE); 
+
+    // 防止大量暫存的 Projection 直方圖自動加入目錄，造成變慢
+    bool oldAddDir = TH1::AddDirectoryStatus();
+    TH1::AddDirectory(kFALSE);
+    map< int, Sensor > sensorMap = LoadSensorMap(iDet);
+    setTDRStyle();
+    TStyle* oldStyle = (TStyle*)gStyle->Clone("oldStyle");
+    // gStyle->Reset("Default"); 
+    gStyle->Copy(*oldStyle);
+    TGaxis::SetMaxDigits(3);
+    gStyle->SetTitleYOffset(1.00);
+    
+    GSPadMargins(0.15,0.15,0.005,0.005);
+
+    // --- 準備直方圖 ---
+    // 手動管理這些主要直方圖，讓它們可以被 Draw 存取
+    bool bBMs = iDet == 2|| iDet ==3;
+    TH3D *h3;
+    int NumXPad = (bBMs) ? 16 : NumIX, NumYPad = (bBMs) ? NumChs_T2*NumROCs_T2/16 : NumIY;
+    if(bBMs)  h3 = new TH3D("h3","h3",NumXPad,1,NumXPad+1,NumYPad,0,NumYPad,66,-120,540);
+    else      h3 = new TH3D("h3","h3",NumXPad,0,NumXPad,NumYPad,0,NumYPad,120,-20,220);
+    TH2D *h2;
+    if(bBMs)  h2 = new TH2D("h2","h2;GID;Cal.ADC",NumAllChs,0,NumAllChs,60,0,300);
+    else      h2 = new TH2D("h2","h2;GID;kCal.ADC",NumAllChs,0,NumAllChs,120,-20,220);
+    TH1D *h1ChNeV = new TH1D("h1ChNeV","h1ChNeV;GID;count",NumAllChs,0,NumAllChs);
+    std::vector<TH2D*> v_h2Pos; 
+    for(size_t w=0; w<WeightStr.size(); ++w) {
+        TH2D* h;
+        if(bBMs) 
+            h = new TH2D(Form("h2Pos_W%lu",w), "", NumIX, 0+0.5, NumIX+0.5, NumIY, 0+0.5, NumIY+0.5);
+        else 
+            h = new TH2D(Form("h2Pos_W%lu",w), "", NumIX, 0-0.5, NumIX-0.5, NumIY, 0-0.5, NumIY-0.5);
+        
+        h->SetDirectory(0);
+        v_h2Pos.push_back(h);
+    }
+    
+    TH1D *h1nHitX = new TH1D("h1nHitX",";Numbeer of hits;count",NumIX,0.5,NumIX+0.5);
+    TH1D *h1nHitY = new TH1D("h1nHitY",";Numbeer of hits;count",NumIY,0.5,NumIY+0.5);
+    TH1D *h1nHitC = new TH1D("h1nHitC",";Numbeer of hits;count",NumAllChs,0.5,NumAllChs+0.5);
+    // 確保這些主要直方圖不會因為我們上面設了 AddDirectory(kFALSE) 而消失
+    h3->SetDirectory(0);
+    h2->SetDirectory(0);
+    h1ChNeV->SetDirectory(0);
+    h1nHitX->SetDirectory(0);
+    h1nHitY->SetDirectory(0);
+    h1nHitC->SetDirectory(0);
+
+    // --- I/O 優化設定 ---
+    t->SetBranchStatus("*", 0); 
+    t->SetBranchStatus("EqGADC", 1);
+    t->SetBranchStatus("iX", 1);
+    t->SetBranchStatus("iY", 1);
+    t->SetBranchStatus("iHit", 1);
+    t->SetBranchStatus("DID", 1);
+    t->SetBranchStatus("GID", 1);
+    t->SetBranchStatus("HGMode", 1);
+    t->SetBranchStatus("channel", 1);
+    t->SetBranchStatus("ROCID", 1);
+
+    std::vector<Double_t> *v_cADC = nullptr;
+    std::vector<Int_t>    *v_iX = nullptr;
+    std::vector<Int_t>    *v_iY = nullptr;
+    std::vector<Int_t>    *v_iHit = nullptr;
+    std::vector<Int_t>    *v_DID = nullptr;
+    std::vector<Int_t>    *v_GID = nullptr;
+    std::vector<Bool_t>   *v_HGMode = nullptr;
+    std::vector<Int_t>    *v_channel = nullptr;
+    std::vector<Int_t>    *v_ROCID = nullptr;
+
+    t->SetBranchAddress("EqGADC", &v_cADC   );
+    t->SetBranchAddress("iX",     &v_iX     );
+    t->SetBranchAddress("iY",     &v_iY     );
+    t->SetBranchAddress("iHit",   &v_iHit   );
+    t->SetBranchAddress("DID",    &v_DID    );
+    t->SetBranchAddress("GID",    &v_GID    );
+    t->SetBranchAddress("HGMode", &v_HGMode );
+    t->SetBranchAddress("channel",&v_channel);
+    t->SetBranchAddress("ROCID",  &v_ROCID  );
+
+    // --- 迴圈讀取與填充 ---
+    cout<<"Start : DrawADCRec (Loading Tree)"<<endl;
+    sw.Stop();
+    if(ofssw.is_open()) ofssw << "DrawADCRec (Loading Tree): " << sw.RealTime() << " s" << endl;
+    sw.Start();
+    Long64_t nEntries = t->GetEntries();
+    for(Long64_t i=0; i<nEntries; ++i){
+        t->GetEntry(i);
+        if(!v_cADC) continue;
+        size_t nHits = v_cADC->size();
+        
+        // 暫存 Beam Profile 計算用的變數 (針對每個 Weight)
+        // 結構: [WeightIndex][0:SumX, 1:SumY, 2:SumW_X, 3:SumW_Y]
+        double bp_stats[3][4] = {0}; 
+        bool bp_hasSignal[3][2] = {false}; // [WeightIndex][0:X_valid, 1:Y_valid]
+        map<pair<int,int>,double> cGADCSum;
+        for(size_t h=0; h<nHits; ++h){
+            if(v_DID->at(h) != iDet) continue; 
+            double val = v_cADC->at(h);
+            int gid = v_GID->at(h);
+            int ix = v_iX->at(h);
+            int iy = v_iY->at(h);
+            int iHH = v_iHit->at(h);
+            if(val>0) cGADCSum[{ix,iy}]+=val;
+            // [警告修正] 這裡 h 已經是 size_t，比較安全
+            double finalADC = val;
+            if(v_HGMode && h < v_HGMode->size()) {
+                if(v_HGMode->at(h)) finalADC /= 10.0;
+            }
+            
+            int globalCh = v_channel->at(h) + v_ROCID->at(h) * 32;
+            h2->Fill(globalCh, finalADC);
+            h1ChNeV->Fill(globalCh);
+            
+            // 2. 累加 Beam Profile 統計量
+            // 針對每一種 Weight 計算
+            for(size_t w=0; w<WeightStr.size(); ++w) {
+                double weight = 1.0;
+                if(w == 0) weight = val; // GADC
+                else if(w == 2) { if(iHH != 0) weight = 0; } // iHit==0 (僅首個 Hit)
+                // w==1 為權重 1 (幾何中心)
+
+                if(weight <= 0) continue;
+                
+                if(bBMs){
+                    bp_stats[w][0] += (ix) * weight * (iy==0); // Sum((iX-1)*W)
+                    bp_stats[w][2] += weight * (iy==0);            // Sum(W)
+                    bp_stats[w][1] += (iy) * weight * (ix==0); // Sum((iY-1)*W)
+                    bp_stats[w][3] += weight * (ix==0);            // Sum(W)
+                }else{
+                    bp_stats[w][0] += (ix) * weight; // Sum((iX-1)*W)
+                    bp_stats[w][2] += weight;            // Sum(W)
+                    bp_stats[w][1] += (iy) * weight; // Sum((iY-1)*W)
+                    bp_stats[w][3] += weight;            // Sum(W)
+                }
+            }
+        } // End Hits Loop
+        int NHITX = 0, NHITY = 0, NHITC = 0;
+        for (auto const& [coord, summed_val] : cGADCSum) {
+            int ix = coord.first;
+            int iy = coord.second;
+            if (bBMs) {
+                if (ix == 0){
+                  NHITY++;
+                  h3->Fill((iy-1)%16+1, (iy-1)/16+2, summed_val);
+                } 
+                if (iy == 0) {
+                  NHITX++;
+                  h3->Fill((ix-1)%16+1, (ix-1)/16, summed_val);
+                }
+            } else {
+                h3->Fill(ix, iy, summed_val/1000);
+                NHITC++;
+                // if(ix==3&&iy==1)cout<<"\t"<<ix<<"\t"<< iy<<"\t"<< summed_val<<endl;
+            }
+        }
+        if(bBMs){
+          h1nHitX->Fill(NHITX);
+          h1nHitY->Fill(NHITY);
+        } 
+        else 
+          h1nHitC->Fill(NHITC);
+        // 3. 填充 Beam Profile Histograms (每個 Event 一次)
+        for(size_t w=0; w<WeightStr.size(); ++w) {
+            // 只有當 X 和 Y 都有有效訊號時才填充
+            double meanX = (bp_stats[w][2] > 0) ? bp_stats[w][0] / bp_stats[w][2] : -9999;
+            double meanY = (bp_stats[w][3] > 0) ? bp_stats[w][1] / bp_stats[w][3] : -9999;
+            // if( (bBMs && bp_hasSignal[w][0] && bp_hasSignal[w][1]) || (!bBMs))
+            v_h2Pos[w]->Fill(meanX, meanY);
+        }
+    }
+    
+    sw.Stop();
+    if(ofssw.is_open()) ofssw << "DrawADCRec (Loading Loop): " << sw.RealTime() << " s" << endl;
+    cout<<"Finish : DrawADCRec (Loading Tree): "<< sw.RealTime() << " s"<<endl;
+    sw.Start();
+    cout<<"Start : DrawADCRec (Set NX*NY pads)"<<endl;
+    t->ResetBranchAddresses();
+    t->SetBranchStatus("*", 1);
+
+    // --- 繪圖邏輯 ---    h3->Sumw2();
+    double MaxIn3D = h3->GetMaximum()*1.2;
+    int Digit_3D = int(log10(MaxIn3D));
+    h3->Scale(1/pow(10,Digit_3D));
+    MaxIn3D = h3->GetMaximum()*1.2;
+
+    TCanvas *canvas = new TCanvas("canvas", "TH3F Slices", NumXPad*600+4, NumYPad*600+28);
+    canvas->Divide(NumXPad, NumYPad,0,0);
+    TCanvas *canvas3 = new TCanvas("canvas3", "TH3F Slices", NumXPad*600+4, NumYPad*600+28);
+    canvas3->Divide(NumXPad, NumYPad,0.0001,0.0001);
+    TH2D *h2ByH3ReduceZ = new TH2D("h2ByH3ReduceZ","iX VS iY VS #muCal.ADC;index X;index Y;Mean Cal.ADC",NumYPad,0,NumYPad,NumXPad,0,NumXPad);
+    if(bBMs){
+      h2ByH3ReduceZ->GetXaxis()->SetNdivisions(-2);
+      h2ByH3ReduceZ->SetBins(NumYPad,0,NumYPad,NumXPad,0,NumXPad);
+    }else{
+      h2ByH3ReduceZ->SetTitle("iX VS iY VS #mu kCal.ADC");
+    }
+    h2ByH3ReduceZ->SetDirectory(0); // 避免污染目錄
+
+    // 用來收集迴圈中產生的暫存 Histogram，最後統一刪除以免記憶體洩漏
+    std::vector<TH1*> tempHists;
+
+    // 自動計算最後一個 Pad 的尺寸做為縮放基準
+    int lastPadIdx = NumXPad * NumYPad;
+    double baseW = (canvas->GetPad(lastPadIdx)) ? canvas->GetPad(lastPadIdx)->GetAbsWNDC() : 0.1;
+    double baseH = (canvas->GetPad(lastPadIdx)) ? canvas->GetPad(lastPadIdx)->GetAbsHNDC() : 0.1;
+
+    sw.Stop();
+    if(ofssw.is_open()) ofssw << "DrawADCRec (Set NX*NY pads): " << sw.RealTime() << " s" << endl;
+    cout<<"Finish : DrawADCRec (Set NX*NY pads): "<< sw.RealTime() << " s"<<endl;
+    sw.Start();
+    for (int xbin = 1; xbin <= NumXPad; ++xbin) {
+        for (int ybin = 1; ybin <= NumYPad; ++ybin) {
+            int rootY = NumYPad - ybin + 1; 
+            int rootPadIndex = (rootY - 1) * NumXPad + xbin;
+            
+            double CSFX = canvas->GetPad(rootPadIndex)->GetAbsWNDC() / baseW;
+            double CSFY = canvas->GetPad(rootPadIndex)->GetAbsHNDC() / baseH;
+
+            // 這裡會產生新的 TH1D，因為 AddDirectory(kFALSE)，需要手動管理
+            TH1D *hProjZ = h3->ProjectionZ(TString::Format("projZ_%d_%d", xbin, ybin), xbin, xbin, ybin, ybin,"cutg");
+            tempHists.push_back(hProjZ); // 加入垃圾回收清單
+
+            if(bBMs)
+                hProjZ->SetTitle(Form(";kCal.ADC;Counts #scale[0.8]{x10^{%d}}",Digit_3D));
+            else
+                hProjZ->SetTitle(Form(";kCal.ADC;Counts #scale[0.8]{x10^{%d}}",Digit_3D));
+            
+            hProjZ->SetMarkerSize(2);
+            hProjZ->SetMarkerStyle(22);
+            hProjZ->GetYaxis()->SetMaxDigits(1);
+            hProjZ->GetYaxis()->SetTitleSize(0.09/CSFY);
+            hProjZ->GetYaxis()->SetLabelSize(0.07/CSFY);
+            hProjZ->GetYaxis()->SetTitleOffset((!bBMs ? 0.95:0.95)*CSFY);
+            hProjZ->GetYaxis()->SetLabelOffset((!bBMs ? 0.01:0.01)*CSFY);
+            hProjZ->GetXaxis()->SetTitleSize(0.1/CSFX);
+            hProjZ->GetXaxis()->SetLabelSize(0.1/CSFX);
+            hProjZ->GetXaxis()->SetTitleOffset((!bBMs ? 0.75:0.75)*CSFX);
+            hProjZ->GetXaxis()->SetLabelOffset((!bBMs ? 0.01:0.01)*CSFX);
+            hProjZ->GetXaxis()->SetNdivisions(-505);
+            hProjZ->GetYaxis()->SetNdivisions(-505);
+            
+            canvas->cd(rootPadIndex)->SetGrid(1,1);
+            hProjZ->GetYaxis()->SetRangeUser(0,MaxIn3D);
+            hProjZ->Draw("eh");
+            
+            double mean = hProjZ->GetMean(), rms = hProjZ->GetRMS();
+            TH1D *hProjZRange = (TH1D*) hProjZ->Clone();
+            tempHists.push_back(hProjZRange); // 加入垃圾回收清單
+
+            hProjZRange->GetXaxis()->SetRangeUser(mean-5*rms,mean+5*rms);
+            hProjZRange->GetXaxis()->SetTitle("Cal.ADC");
+            hProjZRange->GetYaxis()->SetTitleOffset(0.9);
+            hProjZRange->GetXaxis()->SetTitleSize(0.1);
+            hProjZRange->GetXaxis()->SetLabelSize(0.1);
+            hProjZRange->GetXaxis()->SetTitleOffset(0.75);
+            hProjZRange->GetYaxis()->SetTitleSize(0.08);
+            hProjZRange->GetYaxis()->SetLabelSize(0.06);
+            hProjZRange->GetXaxis()->SetNdivisions(-505);
+            hProjZRange->GetYaxis()->SetNdivisions(-505);
+            
+            canvas3->cd(rootPadIndex);
+            hProjZRange->Draw("eh");
+            if(!bBMs) h2ByH3ReduceZ->SetBinContent(ybin,xbin,hProjZRange->GetMean());
+            else      h2ByH3ReduceZ->SetBinContent(ybin,xbin,hProjZRange->GetMean());
+        }
+    }
+
+    // 存檔 (Batch Mode 下這裡非常快)
+    
+    sw.Stop();
+    if(ofssw.is_open()) ofssw << "DrawADCRec (Finish drawing Loop): " << sw.RealTime() << " s" << endl;
+    cout<<"Finish : DrawADCRec (Finish drawing Loop): "<< sw.RealTime() << " s"<<endl;
+    sw.Start();
+    canvas->Print(Form("%sADCSumVSiXiY_Track_D%d.gif",dirGraph.data(),iDet));
+    sw.Stop();
+    if(ofssw.is_open()) ofssw << "DrawADCRec (ADCVSCh_Track.gif): " << sw.RealTime() << " s" << endl;
+    cout<<"Finish : DrawADCRec (Finish drawing Loop): "<< sw.RealTime() << " s"<<endl;
+    sw.Start();
+    canvas3->Print(Form("%sADCSumVSiXiYGauge_Track_D%d.gif",dirGraph.data(),iDet));
+    sw.Stop();
+    if(ofssw.is_open()) ofssw << "DrawADCRec (ADCVSChGauge_Track.gif): " << sw.RealTime() << " s" << endl;
+    cout<<"Finish : DrawADCRec (Drawing Loop): "<< sw.RealTime() << " s"<<endl;
+
+    sw.Start();
+    // 清理暫存的 Histograms (關鍵記憶體釋放)
+    for(auto h : tempHists) delete h;
+    tempHists.clear();
+
+    gStyle->SetPadLeftMargin(0.13);
+    gStyle->SetPadBottomMargin(0.10);
+    GSPadMargins(0.150,0.130,0.05,0.050);
+    
+    TCanvas *canvas2D3D = new TCanvas("canvas2D3D", "",800+4, 800+28);
+    canvas2D3D->SetGrid(1,1);
+    h2ByH3ReduceZ->SetMarkerColor(2);
+    h2ByH3ReduceZ->GetXaxis()->CenterLabels(1);
+    if(!bBMs) h2ByH3ReduceZ->GetYaxis()->CenterLabels(1);
+    else {
+      h2ByH3ReduceZ->GetXaxis()->SetTitle("Direction of channel");
+      h2ByH3ReduceZ->GetYaxis()->SetTitle("position index[2.1mm]");
+      h2ByH3ReduceZ->GetXaxis()->SetBinLabel(1,"X01-16");
+      h2ByH3ReduceZ->GetXaxis()->SetBinLabel(2,"X17-32");
+      h2ByH3ReduceZ->GetXaxis()->SetBinLabel(3,"Y01-16");
+      h2ByH3ReduceZ->GetXaxis()->SetBinLabel(4,"Y17-32");
+    }
+    h2ByH3ReduceZ->GetXaxis()->CenterTitle(1);
+    h2ByH3ReduceZ->GetYaxis()->CenterTitle(1);
+    gStyle->SetPaintTextFormat(".0f"); 
+
+    h2ByH3ReduceZ->Draw("colztext");
+    canvas2D3D->Print(Form("%sADCMeanVSiXiY_D%d.gif",dirGraph.data(),iDet));
+    
+    TCanvas *canvas2 = new TCanvas("canvas2", "",800+4, 800+28);
+    canvas2->cd();
+    h2->Draw("colz"); 
+    canvas2->Print(Form("%sEqGADCVSGch_Track_D%d.gif",dirGraph.data(),iDet));
+
+    canvas2->cd();
+    h1ChNeV->SetMarkerSize(2);
+    h1ChNeV->SetMarkerStyle(22);
+    h1ChNeV->Draw("eh");
+    canvas2->Print(Form("%sNevGch_D%d.gif",dirGraph.data(),iDet));
+
+    // Beam Profile (Histogram creation)
+    // 這裡同樣受益於 Batch Mode
+    gStyle->SetPadRightMargin(0.2);
+    gStyle->SetPadLeftMargin(0.1);
+    
+    sw.Stop();
+    if(ofssw.is_open()) ofssw << "DrawADCRec Beam profile: " << sw.RealTime() << " s" << endl;
+    cout<<"Start : DrawADCRec Beam profile"<<endl;
+    sw.Start();
+    // ... [Beam Profile 繪圖部分保持原邏輯] ...
+    // 因篇幅關係此處不重複，直接使用您原本的邏輯，
+    // 因為 SetBatch(kTRUE) 仍然有效，所以這部分也會變快。
+    // 定義要畫哪些 Weight
+    vector<int> targetWeights;
+    if(bBMs) { targetWeights = {0, 1, 2}; } // GADC, 1, iHit==0
+    else { targetWeights = {0}; } // Only GADC
+
+    for(int w : targetWeights) {
+        TH2D* hPos = v_h2Pos[w];
+        
+        // 設定標題與軸
+        if(bBMs)
+            hPos->SetTitle("Beam profile("+WtNames[w]+"), "+ZImf[iDet]+","+DName[iDet]+";index X;index Y;count");
+        else
+            hPos->SetTitle("Beam profile(ADC Wt.), "+ZImf[iDet]+","+DName[iDet]+";index X;index Y;count");
+
+        // 繪圖 (使用 LayoutProfile2DObj)
+        LayoutProfile2DObj layout(hPos, 1080, "colz", "cTFit(Gaus)", "cTFit(Gaus)");
+        
+        // 檔名設定 (盡量維持原邏輯)
+        TString nameSuffix = (bBMs) ? sfWtNames[w] : "ADCW";
+        layout.Print(Form("%sHitVSPos_%s_D%d.gif", dirGraph.data(), nameSuffix.Data(), iDet));
+        layout.Layout2x1D(600, "hep", "hep");
+        layout.Print2x1D(Form("%sHitVSPos_%s_1D_D%d.gif", dirGraph.data(), nameSuffix.Data(), iDet));
+
+        // 繪製 mm 單位圖 (Scale)
+        hPos->SetTitle("Beam profile("+WtNames[w]+"), "+ZImf[iDet]+","+DName[iDet]+";X position[mm];Y position[mm];count");
+        string drawOpt = Form("colz scale(%f,%f)", ChGapX[iDet], ChGapY[iDet]);
+        LayoutProfile2DObj layout_mm(hPos, 1080, drawOpt, "cTFit(Gaus)", "cTFit(Gaus)");
+        layout_mm.Print(Form("%sHitVSPos_%s_mm_D%d.gif", dirGraph.data(), sfWtNames[w].Data(), iDet));
+        layout_mm.Layout2x1D(600, "hep", "hep");
+        layout_mm.Print2x1D(Form("%sHitVSPos_%s_1D_mm_D%d.gif", dirGraph.data(), sfWtNames[w].Data(), iDet));
+    }
+
+    sw.Stop();
+    if(ofssw.is_open()) ofssw << "DrawADCRec (Drawing beam profile): " << sw.RealTime() << " s" << endl;
+    
+    sw.Start();
+    GSPadMargins(0.150,0.12,0.02,0.05);
+    TCanvas *canvas5 = new TCanvas("canvas5", "",640+4, 640+28);
+    canvas5->cd();
+    canvas5->SetLogy(1);
+    canvas5->SetGrid(1,1);
+    if(bBMs){
+      h1nHitX->SetTitle(Form("Z=%d,%s X",ZDetName[DName[iDet]+"X"],+DName[iDet].Data()));
+      h1nHitY->SetTitle(Form("Z=%d,%s Y",ZDetName[DName[iDet]+"Y"],+DName[iDet].Data()));
+      h1nHitX->SetStats(1);
+      h1nHitY->SetStats(1);
+      h1nHitC->SetStats(1);
+      
+      h1nHitX->SetLineColor(kBlack);
+      h1nHitX->SetMarkerColor(kBlack);
+      h1nHitX->SetLineWidth(2);
+      h1nHitY->SetLineColor(kRed);
+      h1nHitY->SetMarkerColor(kRed);
+      h1nHitY->SetLineWidth(2);
+      double upperR1 = h1nHitX->GetMean()+6*h1nHitX->GetRMS();
+      double upperR2 = h1nHitY->GetMean()+6*h1nHitY->GetRMS();
+      double upperR = upperR1>upperR2?upperR1:upperR2;
+      double upperY = h1nHitX->GetMaximum()>h1nHitY->GetMaximum()
+                      ?h1nHitY->GetMaximum():h1nHitX->GetMaximum();
+      h1nHitX->GetXaxis()->SetRangeUser(0.5,upperR+0.5);
+      h1nHitX->GetYaxis()->SetRangeUser(1,upperY*3);
+      h1nHitX->Draw("he");
+      canvas5->Update();
+      TPaveStats *st1 = (TPaveStats*)h1nHitX->FindObject("stats");
+      if (st1) {
+          st1->SetX1NDC(0.70); st1->SetX2NDC(0.95);
+          st1->SetY1NDC(0.75); st1->SetY2NDC(0.90);
+          st1 = (TPaveStats*)st1->Clone("st1");
+      }
+      h1nHitY->Draw("he");
+      canvas5->Update();
+      TPaveStats *st2 = (TPaveStats*)h1nHitY->FindObject("stats");
+      if (st2) {
+          st2->SetTextColor(kRed);
+          st2->SetLineColor(kRed);
+          st2->SetX1NDC(0.70); st2->SetX2NDC(0.95);
+          st2->SetY1NDC(0.55); st2->SetY2NDC(0.70);
+          st2 = (TPaveStats*)st2->Clone("st2");
+      }
+      h1nHitX->Draw("he");
+      h1nHitY->Draw("hesame");
+      st1->Draw();
+      st2->Draw();
+      canvas5->Modified(); 
+    }else{
+      h1nHitC->SetTitle(Form("Z=%d,%s",ZDetName[DName[iDet]],+DName[iDet].Data()));
+      h1nHitC->SetStats(1);
+      
+      h1nHitC->SetLineColor(kBlack);
+      h1nHitC->SetMarkerColor(kBlack);
+      h1nHitC->SetLineWidth(2);
+      double upperR = h1nHitC->GetMean()+6*h1nHitC->GetRMS();
+      h1nHitC->GetXaxis()->SetRangeUser(0.5,upperR+0.5);
+      h1nHitC->GetYaxis()->SetRangeUser(1,h1nHitC->GetMaximum()*3);
+      h1nHitC->Draw("he");
+      TPaveStats *st1 = (TPaveStats*)h1nHitC->FindObject("stats");
+      if (st1) {
+          st1->SetX1NDC(0.70); st1->SetX2NDC(0.95);
+          st1->SetY1NDC(0.75); st1->SetY2NDC(0.90);
+          st1->Draw();
+      }
+      canvas5->Modified(); 
+    }
+    canvas5->Print(Form("%sHitVSnHit_D%d.gif", dirGraph.data(), iDet));
+    
+    
+    
+    // [加速關鍵 2] 恢復預設值
+    TH1::AddDirectory(oldAddDir);
+    gROOT->SetBatch(wasBatch); // 恢復原本的顯示模式
+    
+    // 清理手動管理的 Histograms
+    delete h3;
+    delete h2;
+    delete h1ChNeV;
+    delete h2ByH3ReduceZ;
+    delete canvas;
+    delete canvas3;
+    delete canvas2;
+    delete canvas2D3D;
+    CleanupHistogramsAndCanvases();
+    sw.Stop();
+    if(ofssw.is_open()) ofssw << "DrawADCRec clear: " << sw.RealTime() << " s" << endl;
+}
+// 輔助函式保持原樣
+void DrawEClusterRingAndShowerShape( TTree *t, int DID){
+  setTDRStyle();
+  TGaxis::SetMaxDigits(3);
+  GSPadMargins(0.150,0.130,0.03,0.050);
+  gStyle->SetTitleYOffset(1.20);
+  gStyle->SetOptFit(0);
+  TCanvas *canvas6 = new TCanvas("canvas6", "",800+4, 800+28);
+  canvas6->cd()->SetLogy(1);
+  map<int,TH1F *> hEAllHit,h1Max,h1sec,h1thr;
+  hEAllHit[DID] = new TH1F(Form("hEAllHit%d",DID),"",90,0,22);
+  hEAllHit[DID]->SetTitle("ADC spectrum@ "+DName[DID]+";10^{4}xCal.ADC; count");
+  hEAllHit[DID]->SetStats(0);
+  h1Max[DID] = (TH1F*) hEAllHit[DID]->Clone(Form("h1Max%d",DID));
+  h1sec[DID] = (TH1F*) hEAllHit[DID]->Clone(Form("h1sec%d",DID));
+  h1thr[DID] = (TH1F*) hEAllHit[DID]->Clone(Form("h1thr%d",DID));
+  SetHistColor(hEAllHit[DID],1);
+  SetHistColor(h1Max[DID],2);
+  SetHistColor(h1sec[DID],4);
+  SetHistColor(h1thr[DID],6);
+  t->Draw(Form("cADC/1e+4>>hEAllHit%d",DID),"","he");
+  t->Draw(Form("cADC[PeakID%d+0]/1e+4>>h1Max%d",DID,DID),"","hesame");
+  t->Draw(Form("cADC[PeakID%d+1]/1e+4>>h1sec%d",DID,DID),"","hesame");
+  t->Draw(Form("cADC[PeakID%d+2]/1e+4>>h1thr%d",DID,DID),"","hesame");
+
+  TLegend *LSpect = new TLegend(0.50,0.75,0.999,0.950);
+  LSpect->SetNColumns(2);
+  LSpect->AddEntry(hEAllHit[DID],Form("#splitline{all Cal.ADC}{Sta:%.1e}",hEAllHit[DID]->Integral()),"le");
+  LSpect->AddEntry(h1Max[DID],Form("#splitline{Cal.ADC_{max}}{Sta:%.1e}",h1Max[DID]->Integral()),"le");
+  LSpect->AddEntry(h1sec[DID],Form("#splitline{Cal.ADC_{rd}}{Sta:%.1e}",h1sec[DID]->Integral()),"le");
+  LSpect->AddEntry(h1thr[DID],Form("#splitline{Cal.ADC_{th}}{Sta:%.1e}",h1thr[DID]->Integral()),"le");
+  LSpect->Draw();
+  hEAllHit[DID]->GetYaxis()->SetRangeUser(1,hEAllHit[DID]->GetMaximum()*50);
+  canvas6->Print(Form("%sEmax_Track_D%d.gif",dirGraph .data(),DID));
+  
+  
+  GSPadMargins(0.150,0.130,0.03,0.010);
+  TCanvas *canvas7 = new TCanvas("canvas7", "",800+4, 800+28);
+  canvas7->SetLogy(1);
+  canvas7->SetGrid(1,1);
+  TCanvas *canvasAll[ClusNameA.size()];
+  for(int iclus = 0;iclus<(int) ClusNameA.size();iclus++){
+    canvasAll[iclus] = new TCanvas(Form("c%d",iclus), "",800+4, 800+28);
+    canvasAll[iclus]->SetGrid(1,1);
+  }
+  canvas7->cd()->SetLogy(1);
+  
+  map<int,TH1F *> h1ETMP,h1ATMP;
+  map<int, map< string, TH1F *> > h1EClus;
+  map<int, map< string, TH1F *> > h1AClus;
+  map<int, map< string,  TF1 *> > f1EClus;
+  map<int, map< string,  TF1 *> > f1AClus;
+  int nBinsTMP; double xmin, xmax;
+  vector<TH1F *> hFocus;
+  vector<TF1  *> fFocus;
+  
+  /*Draw ADC part*/
+  h1ATMP[DID] = new TH1F(Form("h1ATMP%d",DID),"h1ATMP",3000,0,30*1e+4);
+  t->Draw(Form("%s_%d>>%s",ClusNameA[ClusNameA.size()-1].data(),DID,Form("h1ATMP%d",DID)),"nChs[0]>1","goff");
+  GetBestBin(h1ATMP[DID], nBinsTMP, xmin, xmax, 300000, 10);
+  auto h1As = h1AClus[DID];
+  ofstream ofsA(Form("%sEmax_Track_sta_A_D%d.dat", dirGraph.data(), DID));
+  ofsA << "#Focus_Type\tFitMean\tFitMeanErr\tFitSigma\tFitSigmaErr\tResolution\tResErr" << endl;
+  for(int iclus = 0;iclus<(int) ClusNameA.size();iclus++){
+    string NmClus = ClusNameA [iclus];
+    h1As[NmClus] = new TH1F(Form("h%s%d",NmClus.data(),DID),"",nBinsTMP,xmin/1e+4,xmax/1e+4);
+    auto h1 = h1As[NmClus];
+    h1->SetTitle(";10^{4}xCal.GADC;count");
+    SetHistColor(h1,ClusColor[iclus]);
+    canvasAll[iclus]->cd()->SetLogy(1);
+    t->Draw(Form("%s_%d/1e+4>>%s",NmClus.data(),DID,h1->GetName()),"nChs[0]>1","he");
+    f1AClus[DID][NmClus] = GetBestTF1(h1,Form("f%s%d",NmClus.data(),DID));
+    auto f1 = f1AClus[DID][NmClus];
+    SetFlineColor(f1,ClusColor[iclus]);
+    FitTH1byTF1(h1,f1,"Rq");
+    TLegend *LCRing = new TLegend(0.40,0.72,0.999,0.999);
+    LCRing->Draw();
+    DrawCBFitResultBox(
+      h1, f1,Form("Cal.GADC_{%s}",(NmClus.substr(1,NmClus.size()-1)).data()), 0.41, 0.95, 1.3, 1);
+    f1->Draw("lsame");
+    
+    if(iclus==0||iclus==1||iclus==2||iclus==(int) ClusNameA.size()-1){
+      hFocus.push_back(h1); fFocus.push_back(f1);
+    }
+    double m  = f1->GetParameter(4)*1e+4;
+    double me = f1->GetParError(4)*1e+4;
+    double s  = f1->GetParameter(3)*1e+4;
+    double se = f1->GetParError(3)*1e+4;
+    double res = (m != 0) ? s/m : 0;
+    // 誤差傳遞: Delta(s/m) = (s/m) * sqrt((se/s)^2 + (me/m)^2)
+    double rese = (m != 0 && s != 0) ? res * sqrt(pow(se/s, 2) + pow(me/m, 2)) : 0;
+    ofsA << NmClus << "\t" << m << "\t" << me << "\t" << s << "\t" << se << "\t" << res << "\t" << rese << endl;
+  }
+  string NameLast = ClusNameA[ClusNameA.size()-1];
+  string GIFNames="";
+  for(int iclus = 0;iclus<(int) ClusNameA.size();iclus++){
+    string NmClus = ClusNameA [iclus];
+    h1As[NmClus]->GetYaxis()->SetRangeUser(1,h1As[NameLast]->GetMaximum()*50);
+    string strtmp = Form("%sClustering_Track_%s_D%d.gif",dirGraph.data(),NmClus.data(),DID);
+    GIFNames+=strtmp+" ";
+    canvasAll[iclus]->Print(strtmp.data());
+  }
+  ofsA.close();
+  system(Form("python /data4/YuSiang/personalLib/Graph/SortGraph.py %s 5 2 %sClustering_Track_AClus_D%d.gif",GIFNames.data(),dirGraph.data(),DID));
+  
+  canvas7->cd();
+  auto h1max = hFocus[0]; auto f1max = fFocus[0];
+  auto h13x3 = hFocus[1]; auto f13x3 = fFocus[1];
+  auto h15x5 = hFocus[2]; auto f15x5 = fFocus[2];
+  auto h1SUM = hFocus[3]; auto f1SUM = fFocus[3];
+  hFocus[0]->Draw("he");
+  hFocus[1]->Draw("hesame");
+  hFocus[2]->Draw("hesame");
+  hFocus[3]->Draw("hesame");
+  TLegend *LCRing = new TLegend(0.40,0.72,0.999,0.999);
+  LCRing->Draw();
+  DrawCBFitResultBox(h1max, f1max,"Cal.ADC_{max}", 0.41, 0.98, 0.7, 1);
+  DrawCBFitResultBox(h13x3, f13x3,"Cal.ADC_{3x3}", 0.41, 0.84, 0.7, 1);
+  DrawCBFitResultBox(h15x5, f15x5,"Cal.ADC_{5x5}", 0.71, 0.98, 0.7, 1);
+  DrawCBFitResultBox(h1SUM, f1SUM,"Cal.ADC_{all}", 0.71, 0.84, 0.7, 1);
+  canvas7->Print(Form("%sClustering_Track_A_D%d.gif",dirGraph.data(),DID));
+  
+  
+  canvas7->Clear();
+  /*Draw E part*/
+  hFocus.clear();
+  fFocus.clear();
+  h1ETMP[DID] = new TH1F(Form("h1ETMP%d",DID),"h1ETMP",8000,0,800);
+  t->Draw(Form("%s_%d>>%s",ClusNameE[ClusNameE.size()-1].data(),DID,Form("h1ETMP%d",DID)),"nChs[0]>1","goff");
+  GetBestBin(h1ETMP[DID], nBinsTMP, xmin, xmax, 300000, 1);
+  auto h1Es = h1EClus[DID];
+  ofstream ofsE(Form("%sEmax_Track_sta_E_D%d.dat", dirGraph.data(), DID));
+  ofsE << "#Focus_Type\tFitMean\tFitMeanErr\tFitSigma\tFitSigmaErr\tResolution\tResErr" << endl;
+  for(int iclus = 0;iclus<(int) ClusNameE.size();iclus++){
+    string NmClus = ClusNameE [iclus];
+    h1Es[NmClus] = new TH1F(Form("h%s%d",NmClus.data(),DID),"",nBinsTMP,xmin,xmax);
+    auto h1 = h1Es[NmClus];
+    h1->SetTitle(";Energy deposit[MeV];count");
+    SetHistColor(h1,ClusColor[iclus]);
+    canvasAll[iclus]->cd()->SetLogy(1);
+    t->Draw(Form("%s_%d>>%s",NmClus.data(),DID,h1->GetName()),"nChs[0]>1","he");
+    f1EClus[DID][NmClus] = GetBestTF1(h1,Form("f%s%d",NmClus.data(),DID));
+    auto f1 = f1EClus[DID][NmClus];
+    SetFlineColor(f1,ClusColor[iclus]);
+    FitTH1byTF1(h1,f1,"Rq");
+    TLegend *LCRing = new TLegend(0.40,0.72,0.999,0.999);
+    LCRing->Draw();
+    DrawCBFitResultBox(
+      h1, f1,Form("E_{%s}",(NmClus.substr(1,NmClus.size()-1)).data()), 0.41, 0.95, 1.3, 1);
+    f1->Draw("lsame");
+    if(iclus==0||iclus==1||iclus==2||iclus==(int) ClusNameE.size()-1){
+      hFocus.push_back(h1); fFocus.push_back(f1);
+    }
+    double m  = f1->GetParameter(4);
+    double me = f1->GetParError(4);
+    double s  = f1->GetParameter(3);
+    double se = f1->GetParError(3);
+    double res = (m != 0) ? s/m : 0;
+    // 誤差傳遞: Delta(s/m) = (s/m) * sqrt((se/s)^2 + (me/m)^2)
+    double rese = (m != 0 && s != 0) ? res * sqrt(pow(se/s, 2) + pow(me/m, 2)) : 0;
+    ofsE << NmClus << "\t" << m << "\t" << me << "\t" << s << "\t" << se << "\t" << res << "\t" << rese << endl;
+  }
+  ofsE.close();
+  NameLast = ClusNameE[ClusNameE.size()-1];
+  GIFNames="";
+  for(int iclus = 0;iclus<(int) ClusNameE.size();iclus++){
+    string NmClus = ClusNameE [iclus];
+    h1Es[NmClus]->GetXaxis()->SetRangeUser(0,900);
+    h1Es[NmClus]->GetYaxis()->SetRangeUser(1,h1Es[NameLast]->GetMaximum()*50);
+    string strtmp = Form("%sClustering_Track_%s_D%d.gif",dirGraph.data(),NmClus.data(),DID);
+    GIFNames+=strtmp+" ";
+    canvasAll[iclus]->Print(strtmp.data());
+  }
+  system(Form("python /data4/YuSiang/personalLib/Graph/SortGraph.py %s 5 2 %sClustering_Track_EClus_D%d.gif",GIFNames.data(),dirGraph.data(),DID));
+  
+  canvas7->cd();
+  h1max = hFocus[0]; f1max = fFocus[0];
+  h13x3 = hFocus[1]; f13x3 = fFocus[1];
+  h15x5 = hFocus[2]; f15x5 = fFocus[2];
+  h1SUM = hFocus[3]; f1SUM = fFocus[3];
+  hFocus[0]->Draw("he");
+  hFocus[1]->Draw("hesame");
+  hFocus[2]->Draw("hesame");
+  hFocus[3]->Draw("hesame");
+  
+  delete LCRing;
+  LCRing = new TLegend(0.40,0.72,0.999,0.999);
+  LCRing->Draw();
+  DrawCBFitResultBox(h1max, f1max,"E_{max}", 0.41, 0.98, 0.7, 1);
+  DrawCBFitResultBox(h13x3, f13x3,"E_{3x3}", 0.41, 0.84, 0.7, 1);
+  DrawCBFitResultBox(h15x5, f15x5,"E_{5x5}", 0.71, 0.98, 0.7, 1);
+  DrawCBFitResultBox(h1SUM, f1SUM,"E_{all}", 0.71, 0.84, 0.7, 1);
+  canvas7->Print(Form("%sClustering_Track_E_D%d.gif",dirGraph.data(),DID));
+  
+  h1max->GetYaxis()->SetRangeUser(1,h1max->GetMaximum()/50.);
+  h13x3->GetYaxis()->SetRangeUser(1,h13x3->GetMaximum()/50.);
+  h15x5->GetYaxis()->SetRangeUser(1,h15x5->GetMaximum()/50.);
+  h1SUM->GetYaxis()->SetRangeUser(1,h1SUM->GetMaximum()/50.);
+  SaveOrUpdate(h1max);
+  SaveOrUpdate(h13x3);
+  SaveOrUpdate(h15x5);
+  SaveOrUpdate(h1SUM);
+  
+  canvas7->Clear();
+  canvas7->SetLogy(1);
+  
+  TH1F *h11b3 = new TH1F("h11b3", ";Energy Containment;count", 100, 0, 1.01);
+  TH1F *h33b5 = new TH1F("h33b5", ";Energy Containment;count", 100, 0, 1.01);
+  TH1F *h11b5 = new TH1F("h11b5", ";Energy Containment;count", 100, 0, 1.01);
+  TH1F *h11bA = new TH1F("h11bA", ";Energy Containment;count", 100, 0, 1.01);
+  t->Draw(Form("E1x1_%d/E3x3_%d>>h11b3",DID,DID),"","he");
+  t->Draw(Form("E1x1_%d/E5x5_%d>>h11b5",DID,DID),"","hesame");
+  t->Draw(Form("E3x3_%d/E5x5_%d>>h33b5",DID,DID),"","hesame");
+  t->Draw(Form("E1x1_%d/EAll_%d>>h11bA",DID,DID),"","hesame");
+  h11b3->SetStats(0);
+  h33b5->SetStats(0);
+  h11b5->SetStats(0);
+  h11bA->SetStats(0);
+  SetHistColor(h11b3,1);
+  SetHistColor(h33b5,6);
+  SetHistColor(h11b5,2);
+  SetHistColor(h11bA,4);
+  
+  h11b3->GetYaxis()->SetRangeUser(1,h33b5->GetMaximum()*10);
+  h33b5->GetYaxis()->SetRangeUser(1,h33b5->GetMaximum()*10);
+  h11b5->GetYaxis()->SetRangeUser(1,h33b5->GetMaximum()*10);
+  h11bA->GetYaxis()->SetRangeUser(1,h33b5->GetMaximum()*10);
+  TLegend *LShowProfile = new TLegend(0.2,0.6,0.9,0.95);
+  LShowProfile->SetNColumns(3);
+  LShowProfile->SetLineColor(0);
+  LShowProfile->SetFillStyle(3000);
+  LShowProfile->AddEntry(h11b3,Form("#frac{Cal.GADC_{max}}{Cal.GADC_{3x3}}"),"le");
+  LShowProfile->AddEntry(h11b5,Form("#frac{Cal.GADC_{max}}{Cal.GADC_{5x5}}"),"le");
+  LShowProfile->AddEntry(h11bA,Form("#frac{Cal.GADC_{max}}{Cal.GADC_{all}}"),"le");
+  LShowProfile->AddEntry(h11b3,Form("#color[%d]{#mu = %2.2f}",h11b3->GetLineColor(),h11b3->GetMean()),"T");
+  LShowProfile->AddEntry(h11b5,Form("#color[%d]{#mu = %2.2f}",h11b5->GetLineColor(),h11b5->GetMean()),"T");
+  LShowProfile->AddEntry(h11bA,Form("#color[%d]{#mu = %2.2f}",h11bA->GetLineColor(),h11bA->GetMean()),"T");
+  LShowProfile->AddEntry(h33b5,Form("#frac{Cal.GADC_{3x3}}{Cal.GADC_{5x5}}"),"le");
+  LShowProfile->AddEntry(h33b5,Form("#color[%d]{#mu = %2.2f}",h33b5->GetLineColor(),h33b5->GetMean()),"T");
+  LShowProfile->Draw();
+  canvas7->Print(Form("%sClustering_Track_Ratio_D%d.gif",dirGraph .data(),MainDID));
+  
+  h11b3->Draw("he");
+  TLegend *LCRing1b3 = new TLegend(0.2,0.85,0.7,0.95);
+  LCRing1b3->SetNColumns(2);
+  LCRing1b3->SetLineColor(0);
+  LCRing1b3->SetFillStyle(3000);
+  LCRing1b3->AddEntry(h11b3,Form("#frac{Cal.GADC_{max}}{Cal.GADC_{3x3}}"),"le");
+  LCRing1b3->AddEntry(h11b3,Form("#mu = %2.2f",h11b3->GetMean()),"T");
+  LCRing1b3->Draw();
+  canvas7->Print(Form("%sClustering_Track_Ratio_E11b33_D%d.gif",dirGraph .data(),MainDID));
+  h33b5->Draw("he");
+  TLegend *LCRing3b5 = new TLegend(0.2,0.85,0.7,0.95);
+  LCRing3b5->SetNColumns(2);
+  LCRing3b5->SetLineColor(0);
+  LCRing3b5->SetFillStyle(3000);
+  LCRing3b5->AddEntry(h33b5,Form("#frac{Cal.GADC_{3x3}}{Cal.GADC_{5x5}}"),"le");
+  LCRing3b5->AddEntry(h33b5,Form("#mu = %2.2f",h33b5->GetMean()),"T");
+  LCRing3b5->Draw();
+  canvas7->Print(Form("%sClustering_Track_Ratio_E33b55_D%d.gif",dirGraph .data(),MainDID));
+  h11b5->Draw("he");
+  TLegend *LCRing1b5 = new TLegend(0.2,0.85,0.7,0.95);
+  LCRing1b5->SetNColumns(2);
+  LCRing1b5->SetLineColor(0);
+  LCRing1b5->SetFillStyle(3000);
+  LCRing1b5->AddEntry(h11b5,Form("#frac{Cal.GADC_{max}}{Cal.GADC_{5x5}}"),"le");
+  LCRing1b5->AddEntry(h11b5,Form("#mu = %2.2f",h11b5->GetMean()),"T");
+  LCRing1b5->Draw();
+  canvas7->Print(Form("%sClustering_Track_Ratio_E11b55_D%d.gif",dirGraph .data(),MainDID));
+  h11bA->Draw("he");
+  TLegend *LCRing1bA = new TLegend(0.2,0.85,0.7,0.95);
+  LCRing1bA->SetNColumns(2);
+  LCRing1bA->SetLineColor(0);
+  LCRing1bA->SetFillStyle(3000);
+  LCRing1bA->AddEntry(h11bA,Form("#frac{Cal.GADC_{max}}{Cal.GADC_{All}}"),"le");
+  LCRing1bA->AddEntry(h11bA,Form("#mu = %2.2f",h11bA->GetMean()),"T");
+  LCRing1bA->Draw();
+  canvas7->Print(Form("%sClustering_Track_Ratio_E11bAL_D%d.gif",dirGraph .data(),MainDID));
+  
+  h11b3->GetYaxis()->SetRangeUser(1,h33b5->GetMaximum()/10.);
+  h33b5->GetYaxis()->SetRangeUser(1,h33b5->GetMaximum()/10.);
+  h11b5->GetYaxis()->SetRangeUser(1,h33b5->GetMaximum()/10.);
+  h11bA->GetYaxis()->SetRangeUser(1,h33b5->GetMaximum()/10.);
+  SaveOrUpdate(h11b3);
+  SaveOrUpdate(h33b5);
+  SaveOrUpdate(h11b5);
+  SaveOrUpdate(h11bA);
+  
+  
+  ofstream ofs(Form("%sEmax_Track_sta_D%d.dat",dirGraph .data(),DID));
+  ofs<<"#Sta\tMean\tSig\tR13\tR15\tR1A"<<endl;
+  ofs<<h1max->Integral()<<"\t"<<h1max->GetMean()<<"\t"<<h1max->GetRMS()<<"\t";
+  ofs<<h11b3->GetMean()<<"\t"<<h11b5->GetMean()<<"\t"<<h11bA->GetMean()<<endl;
+  
+  ofs.close();
+  CleanupHistogramsAndCanvases();
+  
+}
+void DrawShowerProfile( TTree *t, int iDet){
+  map< int, Sensor > sensorMap = LoadSensorMap(iDet);
+  setTDRStyle();
+  GSPadMargins(0.144,0.144,0.16,0.02);
+  // TGaxis::SetMaxDigits(3);
+  gStyle->SetPaintTextFormat("0.4f");
+  gStyle->SetTitleYOffset(1.20);
+  gStyle->SetTitleXOffset(1.20);
+  TCanvas *c = new TCanvas("c", "", 800+4, 640+28);
+  c->cd()->SetLogz(1);
+  TH2D *h2 = new TH2D("h2",";iX-iX_{max};iY-iY_{max}",
+                    // NumIX*2+1,-NumIX+.5,NumIX-.5,NumIY*2+1,-NumIY+.5,NumIY-.5);
+                    5,-2.5,2.5,5,-2.5,2.5);
+  cout<<NumIX*2+1<<" "<<NumIX+.5<<" "<<NumIX-.5<<" "<<endl;
+  t->Draw("DiY:DiX>>h2",Form("(cADC/A5x5_%d)*(DID==%d)",iDet,iDet),"goff");
+  h2->Scale(1./h2->Integral());
+  // h2->GetXaxis()->SetRangeUser(-1.5,1.5);
+  // h2->GetYaxis()->SetRangeUser(-1.5,1.5);
+  h2->GetZaxis()->SetRangeUser(1e-4,1e-0);
+  h2->GetXaxis()->CenterTitle(1);
+  h2->GetYaxis()->CenterTitle(1);
+  h2->GetYaxis()->SetTitleOffset(1);
+  h2->SetMinimum(1e-4); 
+  h2->SetMarkerColor(2); 
+  h2->SetMarkerSize(2); 
+  h2->Draw("coltextz");
+  SaveOrUpdate(h2,Form("_ShowerSpread_D%d_index",iDet));
+  c->Print(Form("%sShowerProfile_2D_D%d.gif",dirGraph .data(),iDet));
+  LayoutProfile2DObj layout(h2, 1080,"colztext","cTFit(Gaus)","cTFit(Gaus)");
+  layout.pad_main->cd()->SetLogz(1);
+  TGaxis::SetMaxDigits(3);
+  gStyle->SetPaintTextFormat("1.3f");
+  gStyle->SetPaintTextFormat("1.3f");
+  layout.h2->SetMarkerSize(layout.h2->GetMarkerSize()*0.6); 
+  layout.h2->SetMinimum(1e-4); 
+  layout.h2->SetMarkerColor(2); 
+  layout.h2->Draw("coltext");
+  layout.Print(Form("%sShowerProfile_D%d.gif",dirGraph .data(),iDet));
+  layout.Layout2x1D(600,"hep","hep");
+  layout.Print2x1D(Form("%sShowerProfile_2x1D_D%d.gif",dirGraph .data(),iDet));
+  
+  SaveOrUpdate(layout.hX);
+  SaveOrUpdate(layout.hY);
+  h2->SetTitle(";X position[mm];Y position[mm];count");
+  h2->SetBins(5,(-2.5)*ChGapX[iDet],(2.5)*ChGapX[iDet],5,(-2.5)*ChGapY[iDet],(2.5)*ChGapY[iDet]);
+  h2->SetStats(0);
+  h2->ResetStats();
+  h2->Draw("coltextz");
+  SaveOrUpdate(h2,Form("_ShowerSpread_D%d_mm",iDet));
+  c->Print(Form("%sShowerProfile_2D_mm_D%d.gif",dirGraph .data(),iDet));
+  
+  LayoutProfile2DObj layout_mm(h2,1080,"colztext","cTFit(Gaus)","cTFit(Gaus)");
+  layout_mm.pad_main->cd()->SetLogz(1);
+  TGaxis::SetMaxDigits(3);
+  gStyle->SetPaintTextFormat("1.3f");
+  gStyle->SetPaintTextFormat("1.3f");
+  layout_mm.h2->SetMarkerSize(layout_mm.h2->GetMarkerSize()*0.6); 
+  layout_mm.h2->SetMinimum(1e-4); 
+  layout_mm.h2->SetMarkerColor(2); 
+  layout_mm.h2->Draw("coltext");
+  layout_mm.Print(Form("%sShowerProfile_mm_D%d.gif",dirGraph .data(),iDet));
+  layout_mm.Layout2x1D(600,"hep","hep");
+  layout_mm.Print2x1D(Form("%sShowerProfile_2x1D_mm_D%d.gif",dirGraph .data(),iDet));
+  SaveOrUpdate(layout_mm.hX);
+  SaveOrUpdate(layout_mm.hY);
+  // cout<<643<<endl;
+  TH3D *h3 = new TH3D("h3",";iX-iX_{max};iY-iY_{max};Edep[MeV]",
+                  // NumIX*2+1,-NumIX+.5,NumIX-.5,NumIY*2+1,-NumIY+.5,NumIY-.5);
+                  5,-2,2,5,-2,2,90,0,900);
+  // cout<<647<<endl;
+  // cout<<NumIX*2+1<<" "<<NumIX+.5<<" "<<NumIX-.5<<" "<<endl;
+  c->cd()->SetLogz(0);
+  t->Draw("Edep:DiY:DiX>> h3",Form("(Edep/E5x5_%d)*(DID==%d)",iDet,iDet),"box2z");
+  // cout<<650<<endl;
+  
+  c->Print(Form("%sShowerProfile_3D_D%d.gif",dirGraph .data(),iDet));
+  GSPadMargins(0.2,0.2,0.01,0.01);
+  TCanvas *canvas = new TCanvas("canvas", "TH3F Slices", 5*600+4, 5*600+28);
+  canvas->Divide(5,5,0,0); // 8x8 排列
+  // cout<<654<<endl;
+  double MaxIn3D = h3->GetMaximum();
+  int Digit_3D = int(log10(MaxIn3D));
+  // h3->Scale(1/pow(10,Digit_3D));
+  // 迴圈處理每個 XBIN 和 YBIN
+  for (int iX = -2; iX <= 2; ++iX) {
+    for (int iY = -2; iY <= 2; ++iY) {
+      // cout<<iX<<" "<<iY<<endl;
+      // 計算子畫布索引
+      int rootPadIndex = 13 +iX + -iY*5; // 這才是 ROOT divide 實際的索引
+      double CSFX = canvas->GetPad(rootPadIndex)->GetAbsWNDC() / canvas->GetPad(25)->GetAbsWNDC();
+      double CSFY = canvas->GetPad(rootPadIndex)->GetAbsHNDC() / canvas->GetPad(25)->GetAbsHNDC();
+      // 進入正確的子畫布 (使用 ROOT 的實際索引)
+      // canvas->cd(rootPadIndex);
+
+      // 投影到 Z 軸
+      int xbin = h3->GetXaxis()->FindBin(iX);
+      int ybin = h3->GetXaxis()->FindBin(iY);
+      TH1D *hProjZ = h3->ProjectionZ(TString::Format("projZ_%d_%d", iX, iY), xbin, xbin, ybin, ybin,"cutg");
+      // 設定投影直方圖標題和繪製
+      // cout<<hProjZ->Integral()<<endl;
+      hProjZ->SetTitle(Form(";Edep[MeV];Counts #scale[0.8]{x10^{%d}}",Digit_3D));
+        // hProjZ->SetTitle(Form("XBIN=%d, YBIN=%d", xbin-1, ybin-1));
+      hProjZ->SetMarkerSize(2);
+      hProjZ->SetMarkerStyle(22);
+      hProjZ->GetYaxis()->SetMaxDigits(1);
+      hProjZ->GetYaxis()->SetTitleSize(0.09/CSFY);
+      hProjZ->GetYaxis()->SetLabelSize(0.07/CSFY);
+      hProjZ->GetYaxis()->SetTitleOffset(0.95*CSFY*1.5);
+      hProjZ->GetXaxis()->SetTitleSize(0.1/CSFX);
+      hProjZ->GetXaxis()->SetLabelSize(0.1/CSFX);
+      hProjZ->GetXaxis()->SetLabelOffset(0.04*CSFX);
+      hProjZ->GetXaxis()->SetTitleOffset(0.75*CSFX*1.5);
+      hProjZ->GetXaxis()->SetNdivisions(-505);
+      hProjZ->GetYaxis()->SetNdivisions(-505);
+      canvas->cd(rootPadIndex)->SetLogy(1);
+      hProjZ->GetYaxis()->SetRangeUser(0.3,MaxIn3D*3);
+      hProjZ->Draw("eh");
+      TH1D *hProjZS = (TH1D*) hProjZ->Clone(Form("%s_",hProjZ->GetName()));
+      hProjZS->GetYaxis()->SetRangeUser(0,MaxIn3D);
+      SaveOrUpdate(hProjZS);
+    }
+  }
+  canvas->Print(Form("%sShowerProfile_1D_D%d.gif",dirGraph .data(),iDet));
+  system(Form("ln -s %sShowerProfile_1D_D%d.gif %sShowerProfile_1D_mm_D%d.gif",dirGraph .data(),iDet,dirGraph .data(),iDet));
+  CleanupHistogramsAndCanvases();
+}
+map<string, pair<double, double>> ReadResData(string fileName) {
+  map<string, pair<double, double>> data;
+  ifstream ifs(fileName.c_str());
+  if (!ifs.is_open()) {
+    cerr << "Error: Cannot open file " << fileName << endl;
+    return data;
+  }
+  string line;
+  while (getline(ifs, line)) {
+    if (line.empty() || line[0] == '#') continue; // 跳過註解和空行
+    stringstream ss(line);
+    string key;
+    double mean, me, sig, se, res, rese;
+    // 依照格式讀取: Type Mean MeanErr Sigma SigmaErr Resolution ResErr
+    if (ss >> key >> mean >> me >> sig >> se >> res >> rese) {
+      // 移除第一個字元 (例如 'A' 或 'E') 以便直接使用相同 Key 進行比較
+      if (key.size() > 1) {
+        key = key.substr(1);
+      }
+      data[key] = std::make_pair(res, rese);
+    }
+  }
+  ifs.close();
+  return data;
+}
+void DrawEResolution(int DID) {
+  setTDRStyle();
+    // 1. 讀取數據
+    std::string fileA = Form("%sEmax_Track_sta_A_D%d.dat", dirGraph.c_str(), DID);
+    std::string fileE = Form("%sEmax_Track_sta_E_D%d.dat", dirGraph.c_str(), DID);
+    
+    auto resA = ReadResData(fileA);
+    auto resE = ReadResData(fileE);
+
+    if (resA.empty() || resE.empty()) {
+        std::cerr << "Error: Data map is empty. Check your .dat files." << std::endl;
+        return;
+    }
+
+    // 2. 準備直方圖 (作為長條圖)
+    // 取得所有的 Key (Clustering 方法名稱)
+    std::vector<std::string> keys;
+    for (auto const& [name, val] : resA) keys.push_back(name);
+    int nKeys = keys.size();
+
+    TH1F *hResA = new TH1F(Form("hResA%d", DID), "Resolution Comparison;Clustering Method;Resolution (#sigma/#mu)%", nKeys, 0, nKeys);
+    TH1F *hResE = new TH1F(Form("hResE%d", DID), "", nKeys, 0, nKeys);
+
+    // 填充數據與標籤
+    for (int i = 0; i < nKeys; i++) {
+        std::string k = keys[i];
+        
+        // A Method
+        cout<<623<<" "<<resA[k].first<<" "<<resA[k].second<<" "<<resE[k].first<<" "<<resE[k].second<<endl;
+        hResA->SetBinContent(i + 1, resA[k].first*100.);
+        hResA->SetBinError(i + 1, resA[k].second*100.);
+        hResA->GetXaxis()->SetBinLabel(i + 1, k.c_str());
+        
+        // E Method
+        hResE->SetBinContent(i + 1, resE[k].first*100.);
+        hResE->SetBinError(i + 1, resE[k].second*100.);
+    }
+
+    // 3. 設定樣式 (長條圖風格)
+    gStyle->SetOptStat(0);
+    hResA->SetFillColor(kAzure + 7);
+    hResA->SetBarWidth(0.4);
+    hResA->SetBarOffset(0.1);
+    hResA->SetLineColor(kBlack);
+    hResA->SetMarkerColor(4);
+
+    hResE->SetFillColor(kOrange + 1);
+    hResE->SetBarWidth(0.4);
+    hResE->SetBarOffset(0.5);
+    hResE->SetLineColor(kBlack);
+    hResE->SetMarkerColor(kOrange + 4);
+
+    // 4. 繪製
+    TCanvas *cRes = new TCanvas("cRes", "Resolution Comparison", 1080+4, 1080+28);
+    cRes->SetGridy();
+    cRes->SetBottomMargin(0.15);
+
+    hResA->GetYaxis()->SetRangeUser(0, hResA->GetMaximum() * 1.5);
+    hResA->GetXaxis()->SetLabelSize(0.05);
+    hResA->Draw("bar2 error"); // bar2 繪製長條, error 繪製誤差線
+    hResE->Draw("bar2 error same");
+
+    // 5. 圖例
+    TLegend *leg = new TLegend(0.6, 0.75, 0.98, 0.95);
+    leg->AddEntry(hResA, "Method A (ADC-based)", "fpel");
+    leg->AddEntry(hResE, "Method E (Edep-based)", "fpel");
+    leg->SetBorderSize(1);
+    leg->Draw();
+
+    // 6. 輸出
+    cRes->Print(Form("%sResolution_Comp_A_vs_E_D%d.gif", dirGraph.c_str(), DID));
+  CleanupHistogramsAndCanvases();
+}
+void DrawBMAllCombCorrelations( TTree *t ){
+  setTDRStyle();
+  gStyle->SetTitleXOffset(1.00);
+  gStyle->SetTitleYOffset(1.00);
+  gStyle->SetPadRightMargin(0.01);
+  gStyle->SetPadLeftMargin(0.13);
+    // 2. 設定 Branch Address
+    // 注意：這裡使用 '&' 來獲取 vector 指標本身的地址
+    // 假設您的 Branch 名稱分別是 "iX", "iY", 和 "DID"
+    t->SetBranchAddress("iX",  &iX);
+    t->SetBranchAddress("iY",  &iY);
+    t->SetBranchAddress("DID", &fHit_DID);
+    
+    // 3. 準備 2D 直方圖
+    const int nBins = (int)NumChs_T2;       // 使用頻道數作為 Bin 數
+    const double minIdx = -0.5;             // 索引從 0 開始，所以邊界設為 -0.5
+    const double maxIdx = (double)NumChs_T2 - 0.5; // 邊界設為 NumChs - 0.5
+    struct CorrelationPlot {
+        TString name;
+        TString title;
+    };
+    CorrelationPlot plots[] = {
+        {"h2_X1vsY2", "BM.2 X vs Y;Z=1 (X Index(2.1mm));Z=2 (Y Index(2.1mm));Count"},
+        {"h2_X1vsX3", "BM.2X vs BM.1X;Z=1 (X Index(2.1mm));Z=3 (X Index(2.1mm));Count"},
+        {"h2_X1vsY4", "BM.2 X vs BM.1 Y;Z=1 (X Index(2.1mm));Z=4 (Y Index(2.1mm));Count"},
+        {"h2_X3vsY4", "BM.1 X vs Y;Z=3 (X Index(2.1mm));Z=4 (Y Index(2.1mm));Count"},
+        {"h2_Y2vsY4", "BM.2Y vs BM.1Y;Z=2 (Y Index(2.1mm));Z=4 (Y Index(2.1mm));Count"},
+        {"h2_Y2vsX3", "BM.2 Y vs BM.1 X;Z=2 (Y Index(2.1mm));Z=3 (X Index(2.1mm));Count"}
+    };
+    // 建立 6 個 TH2D 物件
+    TH2D *h2_plots[6];
+    for(int i = 0; i < 6; ++i) 
+        h2_plots[i] = new TH2D(plots[i].name, plots[i].title, nBins, minIdx, maxIdx, nBins, minIdx, maxIdx);
+  
+    // 4. 遍歷 TTree Entries
+    Long64_t nEntries = t->GetEntries();
+    std::cout << "Processing " << nEntries << " entries..." << std::endl;
+    
+    for (Long64_t entry = 0; entry < nEntries; ++entry) {
+        t->GetEntry(entry);
+
+        // 確保 vector 被成功讀取
+        if (!iX || !iY || !fHit_DID) {
+            std::cerr << "Error: Hit vectors are null for entry " << entry << std::endl;
+            continue;
+        }
+
+        // a. 暫存單一事件的有效頻道索引 (0-based)
+        std::vector<int> X1_indices; // Z=1, BM.2 X
+        std::vector<int> Y2_indices; // Z=2, BM.2 Y
+        std::vector<int> X3_indices; // Z=3, BM.1 X
+        std::vector<int> Y4_indices; // Z=4, BM.1 Y
+        
+        // 獲取當前事件的總 Hit 數 (由 vector 的大小決定)
+        Int_t currentNHits = iX->size();
+        
+        // b. 篩選 Hit 並儲存頻道索引
+        for (Int_t i = 0; i < currentNHits; ++i) {
+            // 使用 ->at(i) 或 (*vector_ptr)[i] 來存取 vector 元素
+            Int_t iX_val = (*iX)[i];
+            Int_t iY_val = (*iY)[i];
+            Int_t DID_val = (*fHit_DID)[i];
+            // 根據您原始 TTree::Draw 語法中的選擇器進行篩選：
+            // Z=1 X-plane: DID=2 且 iY=0
+            if (DID_val == 2 && iY_val == 0) {
+                // 使用 (Index - 1) 轉換為 0-based 索引 (假設原始索引是 1-based)
+                X1_indices.push_back(iX_val - 1); 
+            }
+            // Z=2 Y-plane: DID=2 且 iX=0
+            else if (DID_val == 2 && iX_val == 0) {
+                Y2_indices.push_back(iY_val - 1);
+            }
+            // Z=3 X-plane: DID=3 且 iY=0
+            else if (DID_val == 3 && iY_val == 0) {
+                X3_indices.push_back(iX_val - 1);
+            }
+            // Z=4 Y-plane: DID=3 且 iX=0
+            else if (DID_val == 3 && iX_val == 0) {
+                Y4_indices.push_back(iY_val - 1);
+            }
+        }
+        
+        // c. 去重：確保每個 Vector 內的索引都是唯一的
+        // 這是為了保證笛卡爾積不會因為同一個頻道有多個 Hit 而被重複計算
+        std::sort(X1_indices.begin(), X1_indices.end());
+        X1_indices.erase(std::unique(X1_indices.begin(), X1_indices.end()), X1_indices.end());
+        
+        std::sort(Y2_indices.begin(), Y2_indices.end());
+        Y2_indices.erase(std::unique(Y2_indices.begin(), Y2_indices.end()), Y2_indices.end());
+
+        std::sort(X3_indices.begin(), X3_indices.end());
+        X3_indices.erase(std::unique(X3_indices.begin(), X3_indices.end()), X3_indices.end());
+
+        std::sort(Y4_indices.begin(), Y4_indices.end());
+        Y4_indices.erase(std::unique(Y4_indices.begin(), Y4_indices.end()), Y4_indices.end());
+
+
+        // d. 計算笛卡爾積並填入 Histograms
+        
+        // 1. X1 vs Y2 (BM.2 內部)
+        for (int x : X1_indices) {
+            for (int y : Y2_indices) {
+                h2_plots[0]->Fill(x, y); // X-axis: X1, Y-axis: Y2
+            }
+        }
+        // 2. X3 vs Y4 (BM.1 內部)
+        for (int x : X3_indices) {
+            for (int y : Y4_indices) {
+                h2_plots[3]->Fill(x, y); // X-axis: X3, Y-axis: Y4
+            }
+        }
+        // 3. X1 vs X3 (X 方向發散度)
+        for (int x1 : X1_indices) {
+            for (int x3 : X3_indices) {
+                h2_plots[1]->Fill(x1, x3); // X-axis: X1, Y-axis: X3
+            }
+        }
+        // 4. Y2 vs Y4 (Y 方向發散度)
+        for (int y2 : Y2_indices) {
+            for (int y4 : Y4_indices) {
+                h2_plots[4]->Fill(y2, y4); // X-axis: Y2, Y-axis: Y4
+            }
+        }
+        // 5. X1 vs Y4 (跨 Z 關聯)
+        for (int x1 : X1_indices) {
+            for (int y4 : Y4_indices) {
+                h2_plots[2]->Fill(x1, y4); // X-axis: X1, Y-axis: Y4
+            }
+        }
+        // 6. Y2 vs X3 (跨 Z 關聯)
+        for (int y2 : Y2_indices) {
+            for (int x3 : X3_indices) {
+                h2_plots[5]->Fill(y2, x3); // X-axis: Y2, Y-axis: X3
+            }
+        }
+    } // End of entry loop
+    
+    
+  TCanvas *c = new TCanvas("c", "", 3*640+4, 2*640+28);
+  c->Divide(3, 2); // 8x8 排列
+  // 繪製所有的 2D 關聯圖
+  TH2D *h2[6];
+  for (int i = 0; i < 6; ++i) {
+    c->cd(i+1)->SetGrid(1,1);
+    c->SetTitle(plots[i].title);
+    h2_plots[i]->Draw("colz");
+  }
+  TString outputName = TString::Format("%sCorrelation_Cartesian.gif", dirGraph.data());
+  c->Print(outputName);
+  delete c;
+  CleanupHistogramsAndCanvases();
+}
+
+void DrawDetPosCorrelation( 
+  TTree *t ,  const string WeightOpt,  const int iDetA,  const int iDetB
+){
+  setTDRStyle();
+  gStyle->SetTitleXOffset(1.00);
+  gStyle->SetTitleYOffset(1.00);
+  gStyle->SetPadRightMargin(0.01);
+  gStyle->SetPadLeftMargin(0.13);
+  // ==========================================================
+  // 1. 定義四個平面的非加權平均頻道索引表達式
+  //    我們假設 (iX-1) 或 (iY-1) 是頻道索引 (從0開始)
+  //    且分母 Sum$(1*...) 是計算觸發的頻道數 (Hits)
+  // ==========================================================
+  // 2D 直方圖的邊界和分箱 (Binning)
+  double minIdXY[4] = {0}, maxIdXY[4] = {0};
+  // TString sZlay[4] = {};
+  // P1: Z=1 (BM.2, X-plane) - 使用 DID=2 和 iY==0 選擇器
+  // P2: Z=2 (BM.2, Y-plane) - 使用 DID=2 和 iX==0 選擇器
+  // P3: Z=3 (BM.1, X-plane) - 使用 DID=3 和 iY==0 選擇器
+  // P4: Z=4 (BM.1, Y-plane) - 使用 DID=3 和 iX==0 選擇器
+  TString p1_X1, p2_Y2, p3_X3, p4_Y4;
+  // double ScaleFactor;
+  if(iDetA==2||iDetA==3){
+    p1_X1 = "Sum$((iX-1)*(iY==0)*(DID==TargetDid)*Wei)/Sum$(Wei*(iY==0)*(DID==TargetDid))";
+    p2_Y2 = "Sum$((iY-1)*(iX==0)*(DID==TargetDid)*Wei)/Sum$(Wei*(iX==0)*(DID==TargetDid))";
+    p1_X1.ReplaceAll("Wei", TString(WeightOpt));
+    p2_Y2.ReplaceAll("Wei", TString(WeightOpt));
+    if(iDetA==2){ maxIdXY[0] = NumChs_T1; maxIdXY[1] = NumChs_T1; };
+    if(iDetA==3){ maxIdXY[0] = NumChs_T2; maxIdXY[1] = NumChs_T2; };
+  }else{
+    p1_X1 = "Sum$((iX)*(DID==TargetDid)*EqGADC)/Sum$(EqGADC*(DID==TargetDid))";
+    p2_Y2 = "Sum$((iY)*(DID==TargetDid)*EqGADC)/Sum$(EqGADC*(DID==TargetDid))";
+    if(iDetA==1){ maxIdXY[0] = NumiX_D1; maxIdXY[1] = NumiY_D1; };
+    if(iDetA==4){ maxIdXY[0] = NumiX_D2; maxIdXY[1] = NumiY_D2; };
+  }
+  if(iDetB==2||iDetB==3){
+    p3_X3 = "Sum$((iX-1)*(iY==0)*(DID==TargetDid)*Wei)/Sum$(Wei*(iY==0)*(DID==TargetDid))";
+    p4_Y4 = "Sum$((iY-1)*(iX==0)*(DID==TargetDid)*Wei)/Sum$(Wei*(iX==0)*(DID==TargetDid))";
+    p3_X3.ReplaceAll("Wei", TString(WeightOpt));
+    p4_Y4.ReplaceAll("Wei", TString(WeightOpt));
+    if(iDetB==2){ maxIdXY[2] = NumChs_T1; maxIdXY[3] = NumChs_T1; };
+    if(iDetB==3){ maxIdXY[2] = NumChs_T2; maxIdXY[3] = NumChs_T2; };
+  }else{
+    p3_X3 = "Sum$((iX)*(DID==TargetDid)*EqGADC)/Sum$(EqGADC*(DID==TargetDid))";
+    p4_Y4 = "Sum$((iY)*(DID==TargetDid)*EqGADC)/Sum$(EqGADC*(DID==TargetDid))";
+    if(iDetB==1){ maxIdXY[2] = NumiX_D1; maxIdXY[3] = NumiY_D1; };
+    if(iDetB==4){ maxIdXY[2] = NumiX_D2; maxIdXY[3] = NumiY_D2; };
+  }
+  
+  p1_X1.ReplaceAll("TargetDid", TString(Form("%d",iDetA)));
+  p2_Y2.ReplaceAll("TargetDid", TString(Form("%d",iDetA)));
+  p3_X3.ReplaceAll("TargetDid", TString(Form("%d",iDetB)));
+  p4_Y4.ReplaceAll("TargetDid", TString(Form("%d",iDetB)));
+
+  // 定義所有可能的 6 種關聯組合及其標籤
+  struct CorrelationPlot {
+      TString name; TString title; TString drawCmd;
+      TString xExpr; TString yExpr;
+      int iLayA; int iLayB;
+  };
+  CorrelationPlot plots[] = {
+    // 1. BM.2 內部 X-Y 耦合
+    {"h2_X1vsY2", DName[iDetA]+"X vs "+DName[iDetA]+"Y;"+DName[iDetA]+"X Index("+sChGapX[iDetA]+"mm);"+DName[iDetA]+"Y Index("+sChGapY[iDetA]+"mm);Count", "", p1_X1, p2_Y2,0,1},
+    // 3. 相同平面 X 在不同 Z 上的發散度
+    {"h2_X1vsX3", DName[iDetA]+"X vs "+DName[iDetB]+"X;"+DName[iDetA]+"X Index("+sChGapX[iDetA]+"mm);"+DName[iDetB]+"X Index("+sChGapX[iDetB]+"mm);Count", "", p1_X1, p3_X3,0,2},
+    // 5. 跨平面/跨 Z 關聯 (X1 vs Y4)
+    {"h2_X1vsY4", DName[iDetA]+"X vs "+DName[iDetB]+"Y;"+DName[iDetA]+"X Index("+sChGapX[iDetA]+"mm);"+DName[iDetB]+"Y Index("+sChGapY[iDetB]+"mm);Count", "", p1_X1, p4_Y4,0,3},
+    // 2. BM.1 內部 X-Y 耦合
+    {"h2_X3vsY4", DName[iDetB]+"X vs "+DName[iDetB]+"Y;"+DName[iDetB]+"X Index("+sChGapX[iDetB]+"mm);"+DName[iDetB]+"Y Index("+sChGapY[iDetB]+"mm);Count", "", p3_X3, p4_Y4,2,3},
+    // 4. 相同平面 Y 在不同 Z 上的發散度
+    {"h2_Y2vsY4", DName[iDetA]+"Y vs "+DName[iDetB]+"Y;"+DName[iDetA]+"Y Index("+sChGapY[iDetA]+"mm);"+DName[iDetB]+"Y Index("+sChGapY[iDetB]+"mm);Count", "", p2_Y2, p4_Y4,1,3},
+    // 6. 跨平面/跨 Z 關聯 (Y2 vs X3)
+    {"h2_Y2vsX3", DName[iDetA]+"Y vs "+DName[iDetB]+"X;"+DName[iDetA]+"Y Index("+sChGapY[iDetA]+"mm);"+DName[iDetB]+"X Index("+sChGapX[iDetB]+"mm);Count", "", p2_Y2, p3_X3,1,2},
+  };
+
+  TCanvas *c = new TCanvas("c", "TH3F Slices", 3*640+4, 2*640+28);
+  c->Divide(3, 2); // 8x8 排列
+  // 繪製所有的 2D 關聯圖
+  TH2D *h2[6];
+  const Double_t x1 = 0.70,y1 = 0.15,x2 = 0.95,y2 = 0.40;
+  // 左邊界,下邊界,右邊界,上邊界
+  gStyle->SetOptFit(1111); // 顯示所有擬合資訊
+  gStyle->SetOptStat(0);   // 關閉直方圖內容的統計框 (方便我們控制 Fit Stats Box)
+  // 遍歷 6 張圖
+  for (int i = 0; i < 6; ++i) {
+    c->cd(i+1)->SetGrid(1,1);
+    
+    // 組合 TTree::Draw() 命令: Y-expression : X-expression
+    plots[i].drawCmd = plots[i].yExpr + ":" + plots[i].xExpr + " >> " + plots[i].name;
+    std::cout << plots[i].drawCmd.Data() << std::endl;
+    
+    // 創建 TH2D 直方圖 (使用您原有的 Binning 邏輯)
+    int iLayA = plots[i].iLayA, iLayB = plots[i].iLayB;
+    h2[i] = new TH2D(plots[i].name, plots[i].title
+         , maxIdXY[iLayA], minIdXY[iLayA], maxIdXY[iLayA], maxIdXY[iLayB], minIdXY[iLayB], maxIdXY[iLayB]);
+    std::cout << maxIdXY[iLayA] << "\t" << minIdXY[iLayA] << "\t" << maxIdXY[iLayA] << "\t" 
+              << maxIdXY[iLayB] << "\t" << minIdXY[iLayB] << "\t" << maxIdXY[iLayB] << std::endl;
+    
+    // 執行 TTree::Draw()
+    // 必須先 Draw，否則 Fit 會出錯 (因為 Draw 填充了直方圖)
+    // 使用 "goff" 參數 (graphics off) 避免重複繪圖
+    Long64_t entries = t->Draw(plots[i].drawCmd, "", "colz goff");
+    std::cout << plots[i].name.Data() << " 填充事件數: " << entries << std::endl;
+
+    // 設置軸標題和標籤居中
+    h2[i]->GetXaxis()->CenterTitle(1);
+    h2[i]->GetYaxis()->CenterTitle(1);
+    h2[i]->GetXaxis()->CenterLabels(1);
+    h2[i]->GetYaxis()->CenterLabels(1);
+
+    // 繪製直方圖 (此時沒有 Stats Box)
+    h2[i]->Draw("colz");
+    if(i+1==2||i+1==5)
+      TFitResultPtr fitResult = h2[i]->Fit("pol1", "S"); // "S" 參數用於返回 TFitResultPtr
+    if (gPad) { // 確保當前 TPad 存在
+      gPad->Update(); 
+      TPaveStats *st = (TPaveStats*)h2[i]->FindObject("stats");
+      if (st) {
+        // 1. 設置 Stats Box 的 NDC 座標
+        st->SetX1NDC(0.13); st->SetY1NDC(0.65); 
+        st->SetX2NDC(0.65); st->SetY2NDC(0.95); 
+        st->Draw();
+      }
+    }
+    c->Update();
+  }
+  TString outputName = TString::Format("%sCorrelation_D%dtoD%d_%s.gif", dirGraph.data(),iDetA,iDetB,(WeightOpt == "EqGADC" ? "Wt" : "Unw"));
+  c->Print(outputName);
+  delete c;
+  CleanupHistogramsAndCanvases();
+}
+void DrawDetPosCorrelations( TTree *t ){
+  for(size_t iCorA = 0;iCorA<CorDets.size();iCorA++){
+    for(size_t iCorB = iCorA+1;iCorB<CorDets.size();iCorB++){
+      DrawDetPosCorrelation(t,WeightStr[0],CorDets[iCorA],CorDets[iCorB]);
+      DrawDetPosCorrelation(t,WeightStr[1],CorDets[iCorA],CorDets[iCorB]);
+    }
+  }
+  // DrawBMAllCombCorrelations(t);
+}
+
+void DrawADCRecCalv2( const string dirAnaPath ,  const string FileName ){
+  string SourceFileNameEvents = dirAnaPath+FileName+"_ReConCal.root";
+  TFile *file  = TFile::Open(SourceFileNameEvents.data());
+  dirGraph = dirAnaPath+string("/graphCal/");
+  
+  TTree *t = (TTree*) file->Get("t");
+  if (!t) {
+      std::cerr << "Error: TTree pointer is null." << std::endl;
+      std::cerr << "  DrawADCRecCalv2.C("<<dirAnaPath<<","<<FileName<<")"<< std::endl;
+      return;
+  }
+  string outHistName = dirAnaPath + FileName + "_ReConCal_Hist.root";
+  fSaveHist = new TFile(outHistName.c_str(), "UPDATE");
+  system(Form("mkdir -p %s",dirGraph.data()));
+  for(size_t iDet = 0;iDet<AnaDets.size();iDet++){
+    // cout<<700<<endl;
+    DrawADCRecCalv2(t,AnaDets[iDet]);
+  }
+  DrawDetPosCorrelations(t);
+  
+  string SourceFileNameEvents2 = dirAnaPath+FileName+"_ReConCalSort.root";
+  TFile *file2  = TFile::Open(SourceFileNameEvents2.data());
+  TTree *t2 = (TTree*) file2->Get("t");
+  if (!t2) {
+      std::cerr << "Error: TTree pointer is null." << std::endl;
+      std::cerr << "  DrawADCRecCalv2.C("<<dirAnaPath<<","<<FileName<<")"<< std::endl;
+      return;
+  }else{
+    cout << "  DrawADCRecCalv2.C("<<file2->GetName()<< std::endl;
+  }
+  
+  for(size_t iZDC = 0; iZDC < CrystalDets.size(); iZDC++){
+    int DID = CrystalDets[iZDC];
+    DrawEClusterRingAndShowerShape(t2,DID);
+    DrawEResolution(DID);
+    DrawShowerProfile(t2, DID);
+  }
+  if (fSaveHist) {
+    fSaveHist->Close();
+    delete fSaveHist;
+    fSaveHist = nullptr;
+  }
+  if (file)  file->Close();
+  if (file2) file2->Close();
+}
+void DrawADCRecCalv2() {
+  cout<<"Finished compiling of DrawADCRecCalv2.C+"<<endl;
+  // DrawADCRecCalv2("/data8/ZDC/EMCal/PbWO4SiPM/AnaCode1/Save/EScanTypicalRuns/Run2013_796MeV_HV17_VF650_650_x4_Pos145mm_-346mm_0mm_232554.122PbWO4/", "Run2013_796MeV_HV17_VF650_650_x4_Pos145mm_-346mm_0mm_232554.122PbWO4");
+}

@@ -284,10 +284,11 @@ void Decoding(
   t->Branch("BufferLTA",   &BufferLTA  );
   t->Branch("BufferLTB",   &BufferLTB  );
   t->Branch("RotateAng",   &RotateAng  );
-  
+  // cout<<287<<endl;
   vector<string> hexData = parseHexFile(HexRawSciFileName);
+  // cout<<289<<endl;
   vector<Packet> packets = extractPackets(hexData);
-  cout<<"L290"<<endl;
+  // cout<<"L290"<<endl;
   double Eff = 0, Tot = 0, Loss = 0;
   for (const auto& pkt : packets) {
       // cout << "Packet: ";
@@ -425,6 +426,7 @@ void Decoding(
         ofSyncData<<"HV-SW2-VF, LTROC-LTBuff  B = "<<HighVROCB<<"-"<<SW2VROCB<<"-"<<VFROCB<<", "<<LiveTimeB<<"%-"<<BufferLTB<<"%\n";
 
     }else{
+      // cout<<429<<endl;
       stringstream ssData;
       for (const auto& word : pkt.data) {
         ssData << word <<" ";
@@ -444,7 +446,8 @@ void Decoding(
           if(ADCVal>11000) ADCVal = ADCVal-16384;
           // if(ADCVal>0||AllowNegADC){
             ADC_.push_back(ADCVal);
-            bHit_.push_back(bHit&&ADCVal>=0);
+            // bHit_.push_back(bHit&&ADCVal>=0);
+            bHit_.push_back(bHit);
             //ADC value (bit13-0)
             // -1=(1)”11111111111111”,         // 0=”00000000000000”,         // 1=”00000000000001”
             // If the ADC value > 11000(5500x2), it is a negative value.
@@ -503,6 +506,7 @@ void Decoding(
             ofiss<<"And Clear the data before 1st event"<<endl;
             ofiss<<"Totally erase: "<<nHits<<" hits"<<endl;
           }
+          // cout<<507<<endl;
           iData++;
           bHit_.clear();
           HitGTMID_.clear();
@@ -525,6 +529,8 @@ void Decoding(
           fcnt0[CITIROCID] = fcnt;
           fcnt0[2] = fcnt0[CITIROCID];
           pcnt0 = pcnt;
+          // cout<<531<<endl;
+          // throw;
           // if(iData>200) break;
           // throw;
         }
@@ -532,17 +538,18 @@ void Decoding(
     }
     
   }
+  // cout<<541<<endl;
   packets.clear();
   hexData.clear();
+  // cout<<544<<endl;
 
   if(pcnt0!=-1) t->Fill();
   f->Write();// save the TTree into the tfile
   f->Close();// tfile closeed
+  // cout<<549<<endl;
   
-  // lost = ByteIndex; 
-  f->Close();
-  delete t;
-
+  // delete t;
+  // cout<<552<<endl;
   cout<<"Finish to decode the science data\n";
   ofstream ott(Form("%s/ConvertProblem_DID%d.dat",NameRoot.data(),iDetector) );
   ofstream ott2(Form("%s/ConvertProblemNew_DID%d.dat",NameRoot.data(),iDetector) );

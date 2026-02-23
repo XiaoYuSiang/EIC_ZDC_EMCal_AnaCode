@@ -1,6 +1,7 @@
 #include <vector>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <TMath.h>       // ROOT 檔案讀取
 #include <TFile.h>       // ROOT 檔案讀取
 #include <TTree.h>       // ROOT TTree
@@ -17,11 +18,16 @@
 #include <TStyle.h>  // 用於 gStyle
 #include <TROOT.h>   // ROOT 全域變數（包含 gStyle）
 #include <TH2F.h>  // 用於 TH2F 2D 直方圖
+#include "./GIDMapping.h"
+#include "/data8/ZDC/EMCal/ShareScript/tdrstyle.h"
+#include "/data4/YuSiang/personalLib/RPU/DBMLayouts.h"
+#include "/data4/YuSiang/personalLib/EFFTool/MemoryClear.h"
 
 using namespace std;
 
 string defRFM = "/data8/ZDC/EMCal/LYSOPWOBMCosmic/CosmicRay_Full_System/CosmicRay_Full_System_ReCon.root";
-string defSP  = "/data8/ZDC/EMCal/LYSOPWOBMCosmic/CosmicRay_Full_System/Graph/";
+string defSP  = "/data8/ZDC/EMCal/LYSOPWOBMCosmic/CosmicRay_Full_System/graphRec/";
+string SavePath = "";
 
 struct Hit {
   double x, y, z, w;
@@ -123,39 +129,11 @@ Hit GetCenter(const vector<Hit>& points) {
     return result;
 }
 
-void DrawTriggerLinesCenter() {
-  cout<< "Finish compile: DrawTriggerLinesCenter"<<endl;
-}
-// void DrawTriggerLinesCenter(const string  RootFileName = defRFM,const string SavePath = defSP) {
-void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) {
-    std::vector<std::string> vRFN;
-    std::stringstream ss(RootFileName);
-    std::string token;
-    while (std::getline(ss, token, ',')) vRFN.push_back(token);
-    // 打開 ROOT 文件
-    system(Form("mkdir -p %s",SavePath.data()));
-    gStyle->SetPadRightMargin(0.05);
-    gStyle->SetPadLeftMargin(0.15);
-    // TFile *file = TFile::Open("/data8/ZDC/EMCal/LYSO2ABMCosmic/250118/CosRay_FV430_30V_FV320_x40_test2/CosRay_FV430_30V_FV320_x40_test2_ReCon.root");
-    TChain *t = new TChain("t");
-    for (const auto& word : vRFN) {
-      TFile *file = TFile::Open(word.data());
-      if (!file || file->IsZombie()) {
-          cerr << "無法打開文件！" << endl;
-          return;
-      }
-      file->Close();
-      delete file;
-      t->Add(word.data());
-      std::cout << word << std::endl;
-    }
-
-    // 獲取 TTree
-    // TTree *t = (TTree*)file->Get("t");
-    // if (!t) {
-        // cerr << "無法找到 TTree 't'！" << endl;
-        // return;
-    // }
+void DrawTriggerLinesCenter( TTree *t , const int iDet ,int iwt = 0 ) {
+  string BackStr = sfWtNames[iwt].Data(),TitStr = WtNames[iwt].Data();
+    setTDRStyle();
+    TGaxis::SetMaxDigits(3);
+    gStyle->SetTitleYOffset(1.250);
 
     // 定義變數來存取所有 branch
     Long64_t eventID;
@@ -219,76 +197,67 @@ void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) 
     TH2F *h2D0 = new TH2F("h2D0","",8,-28.8,28.8,8,-28.8,28.8);
     TH2F *h2D1 = new TH2F("h2D1","LYSO Z=-7.51mm;X position (mm);Y position (mm);ADC",8,-17.5,63.95,8,90.12,171.72);
     float centLYSOY = (90.12+171.72)/2.;
-    TH2F *h2D2 = new TH2F("h2D2","PWO Z=-137.35mm;X position (mm);Y position (mm);ADC",6,-40.65-10.25,64.35+10.25,6,68.92-10.25,173.92+10.25);
+    TH2F *h2D2 = new TH2F("h2D2","PWO Z=-7.55mm;X position (mm);Y position (mm);ADC",6,-40.65-10.25,64.35+10.25,6,68.92-10.25,173.92+10.25);
     // boxh3->SetStats(0);
     h2T1->SetStats(0);
     h2T2->SetStats(0);
     h2D1->SetStats(0);
     h2D2->SetStats(0);
-    // h2T1->GetXaxis()->SetRangeUser(-50,50);
-    // h2T1->GetYaxis()->SetRangeUser(-50,50);
-    // h2T2->GetXaxis()->SetRangeUser(-50,50);
-    // h2T2->GetYaxis()->SetRangeUser(-50,50);
-    // h2BD0->GetXaxis()->SetRangeUser(-50,50);
-    // h2BD0->GetYaxis()->SetRangeUser(-50,50);
+    
     h2BD0->SetStats(0);
     
-    TCanvas* c3 = new TCanvas("c3", "3D Scatter Plot with Color", 600*4+4, 600*2+28);
-    c3->cd()->Divide(4,2);
-    TH2F *h2DiffB = new TH2F("h2DiffB","Position Difference;#Delta X (mm);#Delta Y position (mm);ADC",240,-120,120,240,-120,120);
-    TH2F *h2Diff1 = new TH2F("h2Diff1","Position Difference @LYSO;#Delta X (mm);#Delta Y position (mm);ADC",240,-120,120,240,-120,120);
-    TH2F *h2Diff2 = new TH2F("h2Diff2","Position Difference @PbWO4;#Delta X (mm);#Delta Y position (mm);ADC",240,-120,120,240,-120,120);
-    TH2F *h2Dir = new TH2F("h2Dir","Direction;dX/dZ;dY/dZ;count",120,-1,1,120,-1,1);
-    TH2F *hThetaPhi = new TH2F("hThetaPhi","Direction;#phi;#theta;count",100, -TMath::Pi(), TMath::Pi(),100, 0, TMath::Pi()/2.);
+    TCanvas* c3 = new TCanvas("c3", "3D Scatter Plot with Color", 600*2+3, 600*2+28);
+    c3->cd()->Divide(2,2);
+    TH2F *h2DiffB1 = new TH2F("h2DiffB1","",71,-74.55,+74.55,71,-74.55,+74.55);
+    h2DiffB1->SetTitle(Form("Position Residual%s @LYSO;#Delta X (mm);#Delta Y position (mm);ADC",TitStr.data()));
+    TH2F *h2DiffB2 = new TH2F("h2DiffB2","",71,-74.55,+74.55,71,-74.55,+74.55);
+    h2DiffB2->SetTitle(Form("Position Residual%s@PbWO4;#Delta X (mm);#Delta Y position (mm);ADC",TitStr.data()));
+    TH2F *h2Diff1 = new TH2F("h2Diff1","",71,-74.55,+74.55,71,-74.55,+74.55);
+    h2Diff1->SetTitle(Form("Position Residual%s@LYSO;#Delta X (mm);#Delta Y position (mm);ADC",TitStr.data()));
+    TH2F *h2Diff2 = new TH2F("h2Diff2","",71,-74.55,+74.55,71,-74.55,+74.55);
+    h2Diff2->SetTitle(Form("Position Residual%s@PbWO4;#Delta X (mm);#Delta Y (mm);ADC",TitStr.data()));
+    TH2F *h2Diff2C = new TH2F("h2Diff2C","",71,-74.55,+74.55,71,-74.55,+74.55);
+    h2Diff2C->SetTitle(Form("Position Residual(Combination)%s@PbWO4;#Delta X (mm);#Delta Y (mm);ADC",TitStr.data()));
+    TH1F *h1DiffR = new TH1F("h1DiffR","",84,0,120);
+    h1DiffR->SetTitle(Form("R@PbWO4%s;R=#sqrt{#DeltaX^{2}+#DeltaY^{2}} (mm);count",TitStr.data()));
+    h1DiffR->SetStats(1);
+    TH1F *h1DiffR_PC = new TH1F("h1DiffR_PC","",84,0,120);
+    h1DiffR_PC->SetTitle(Form("R(Cali.)@PbWO4%s;R=#sqrt{(#DeltaX-#mu#DeltaX)^{2}+(#DeltaY-#mu#DeltaY)^{2}} [mm];count",TitStr.data()));
+    h1DiffR_PC->SetStats(1);
+    TH2F *h2Dir = new TH2F("h2Dir","",71,-1,1,71,-1,1);
+    h2Dir->SetTitle(Form("Direction%s;dX/dZ;dY/dZ;count",TitStr.data()));
+    TH2F *hThetaPhi = new TH2F("hThetaPhi","",100, -TMath::Pi(), TMath::Pi(),100, 0, TMath::Pi()/2.);
+    hThetaPhi->SetTitle(Form("Direction%s;#phi(rad);#theta(rad);count",TitStr.data()));
+    h2Dir->SetStats(1);
+    hThetaPhi->SetStats(1);
 
+    vector< pair<double,double> > vDatas;
     for (Long64_t i = 0; i < nEntries; i++) {
-      t->GetEntry(i); // 加載第 i 個 entry
-      // 打印數據
-      // cout << "Entry " << i << ":" << endl;
-      // cout << "  eventID: " << eventID << endl;
-      // cout << "  pcnt: " << pcnt << ", fcnt: " << fcnt << endl;
-      // cout << "  nHits0: " << nHits0 << ", nROC0: " << nROC0 << endl;
-      // cout << "  nHits1: " << nHits1 << ", nROC1: " << nROC1 << endl;
-      // cout << "  nHits2: " << nHits2 << ", nROC2: " << nROC2 << endl;
-      // cout << "  nHits3: " << nHits3 << ", nROC3: " << nROC3 << endl;
-      // cout << "  iHit: ";
-      // for (auto &hit : *iHit) cout << hit << " ";
-      // cout << endl;
-      // cout << "  pX: ";
-      // for (auto &px : *pX) cout << px << " ";
-      // cout << endl;
-      // cout << "  pY: ";
-      // for (auto &py : *pY) cout << py << " ";
-      // cout << endl;
-      // cout << "  GADC11: " << GADC11 << ", GADC33: " << GADC33 << endl;
-      // cout << "  GADC55: " << GADC55 << ", GADCAL: " << GADCAL << endl;
-      // cout << "  GADCXs: " << GADCXs << endl;
-      // cout << "  PeakID: " << PeakID << ", Cortex: " << Cortex << endl;
-      // cout << "  CenpX: " << CenpX << ", CenpY: " << CenpY << endl;
-      // cout << "  ADC: ";
-      // for (auto &adc : *ADC) cout << adc << " ";
-      // cout << endl;
+      t->GetEntry(i); 
       int NowHit = 0;
       vector<Hit> Trigger1PosX, Trigger1PosY, Trigger2PosX, Trigger2PosY;
-      vector<Hit> ZDC1, ZDC2;
+      vector<Hit> ZDC2;
       // cout<<nHits<<endl;
       if(nHits2<=0) continue;
       if(nHits0>20&&nHits1>20) continue;
       for(int iH = 0; iH<nHits;iH++){
         double px = pX->at(iH), py = pY->at(iH), pz = pZ->at(iH);
         int iz = iZ->at(iH);
-        double Weight = GADC->at(iH);
-        if(iz==1) Trigger2PosX.push_back(Hit(px,0,pz,Weight+1200));
-        else if(iz==2) Trigger2PosY.push_back(Hit(0,py,pz,Weight+1200));
-        else if(iz==3) Trigger1PosX.push_back(Hit(px,0,pz,Weight+1200));
-        else if(iz==4) Trigger1PosY.push_back(Hit(0,py,pz,Weight+1200));
-        else if(iz==5){
-          h2D1->Fill(px,py,Weight);
-          ZDC1.push_back(Hit(px,py,pz,Weight));
-        }else if(iz==6){
+        int ihit = iHit->at(iH);
+        double Weight = GADC->at(iH)+1200;
+        // if(iwt==0) Weight = GADC->at(iH)+1200;
+        if(iwt==1) Weight = 1;
+        if(iz<5){
+          if(iwt==2&&ihit!=0) continue;
+          if(iz==1) Trigger2PosX.push_back(Hit(px,0,pz,Weight));
+          else if(iz==2) Trigger2PosY.push_back(Hit(0,py,pz,Weight));
+          else if(iz==3) Trigger1PosX.push_back(Hit(px,0,pz,Weight));
+          else if(iz==4) Trigger1PosY.push_back(Hit(0,py,pz,Weight));
+          // if(i<20) cout<<iz<<" "<<px<<" "<<py<<" "<<pz<<" "<<Weight<<endl;
+        }else if(iz==5){
           h2D2->Fill(px,py,Weight);
           ZDC2.push_back(Hit(px,py,pz,Weight));
-        } 
+        }
 
       }
       vector<Hit> 
@@ -299,18 +268,14 @@ void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) 
       
       Hit CenterT1 = GetCenter(Trigger1);
       Hit CenterT2 = GetCenter(Trigger2);
-      Hit CenterD1 = GetCenter(ZDC1);
       Hit CenterD2 = GetCenter(ZDC2);
       double AVGDisT1 = AverageDistance(Trigger1,CenterT1);
       double AVGDisT2 = AverageDistance(Trigger2,CenterT2);
       if(AVGDisT1>8||AVGDisT2>8) continue;
-      TGraph* PointDiff1 = new TGraph();
       TGraph* PointDiff2 = new TGraph();
-      TGraph* PointDiffC1 = new TGraph();
       TGraph* PointDiffC2 = new TGraph();
       TGraph* PITC1 = new TGraph();
       TGraph* PITC2 = new TGraph();
-      TGraph* PointCZDC1 = new TGraph();
       TGraph* PointCZDC2 = new TGraph();
       TGraph* PointCT1 = new TGraph();
       TGraph* PointCT2 = new TGraph();
@@ -318,12 +283,10 @@ void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) 
       TGraph* PITC2CTZT = new TGraph();
       CheckDataRM(Trigger1,CenterT1);
       CheckDataRM(Trigger2,CenterT2);
-      CheckDataRMZDC1(ZDC1,CenterD1);
       CheckDataRMZDC2(ZDC2,CenterD2);
       CenterT1 = GetCenter(Trigger1);
       CenterT2 = GetCenter(Trigger2);
-      CenterD1 = GetCenter(ZDC1);
-      CenterD2 = GetCenter(ZDC2);
+      CenterD2 = GetCenter(ZDC2); 
       // 塞入數據
       int indexAll = 0,index1 = 0,index2 = 0;
       for (const auto& [xi, yi, zi, wi] : Trigger1){
@@ -335,7 +298,6 @@ void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) 
           h2T2->Fill( xi, yi, wi); // Z 值將自動對應顏色
           index2++;
       }
-      const auto [cxD1, cyD1, czD1, cwD1] = CenterD1;
       const auto [cxD2, cyD2, czD2, cwD2] = CenterD2 ;
       for (const auto& [xi2, yi2, zi2, wi2] : Trigger1){
         for (const auto& [xi1, yi1, zi1, wi1] : Trigger2){
@@ -344,28 +306,22 @@ void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) 
           double xtmp = xi1 + t * (xi2 - xi1);
           double ytmp = yi1 + t * (yi2 - yi1);
           PITC1->SetPoint(indexAll,xtmp,ytmp);
-          double DifX = cxD1-xtmp, DifY = cyD1-ytmp;
-          PointDiff1->SetPoint(indexAll, DifX, DifY); // Z 值將自動對應顏色
-          h2Diff1->Fill( DifX, DifY,1./(index1*index2));
           // cout<<cxD1<<" "<<cyD1<<endl;
           // cout<<DifX<<" "<<DifY<<" "<<1./(index1*index2)<<endl;
           
         // const auto& [cxD2, cyD2, czD2, cwD2] : CenterD2 ;
         
-          t = (-137.35 - zi1) / (zi2 - zi1);
+          t = (-7.55 - zi1) / (zi2 - zi1);
           xtmp = xi1 + t * (xi2 - xi1);
           ytmp = yi1 + t * (yi2 - yi1);
           PITC2->SetPoint(indexAll,xtmp,ytmp);
-          DifX = cxD2-xtmp, DifY = cyD2-ytmp;
-          if(nHits3!=0) PointDiff2->SetPoint(indexAll, DifX, DifY); // Z 值將自動對應顏色
-          if(nHits3!=0) h2Diff2->Fill( DifX, DifY,1./(index1*index2));
+          double DifX = cxD2-xtmp, DifY = cyD2-ytmp;
+          PointDiff2->SetPoint(indexAll, DifX, DifY); // Z 值將自動對應顏色
+          h2Diff2C->Fill( DifX, DifY,1./(index1*index2));
         
           indexAll++;
         }
       }
-      PointCZDC1->SetPoint(0, cxD1, cyD1); // Z 值將自動對應顏色
-      PointCZDC1->SetMarkerStyle(20);
-      PointCZDC1->SetMarkerColorAlpha(2,0.9);
       PointCZDC2->SetPoint(0, cxD2, cyD2); // Z 值將自動對應顏色
       PointCZDC2->SetMarkerStyle(20);
       PointCZDC2->SetMarkerColorAlpha(2,0.9);
@@ -375,7 +331,7 @@ void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) 
       double CT1x = CenterT1.x, CT2x =CenterT2.x, CT1y =CenterT1.y, CT2y =CenterT2.y;
       double ttmp1 = (-7.51 - CenterT1.z) / (CenterT2.z - CenterT1.z);
       double CTIx1 = CT1x + ttmp1 * (CT2x - CT1x), CTIy1 = CT1y + ttmp1 * (CT2y - CT1y);
-      double ttmp2 = (-137.35 - CenterT1.z) / (CenterT2.z - CenterT1.z);
+      double ttmp2 = (-7.55 - CenterT1.z) / (CenterT2.z - CenterT1.z);
       double CTIx2 = CT1x + ttmp2 * (CT2x - CT1x), CTIy2 = CT1y + ttmp2 * (CT2y - CT1y);
       double slopex = (CT2x-CT1x)/(CenterT2.z-CenterT1.z), slopey = (CT2y-CT1y)/(CenterT2.z-CenterT1.z);
       h2Dir->Fill(slopex,slopey);
@@ -400,21 +356,16 @@ void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) 
       PITC1->SetMarkerColorAlpha(kGreen,0.6);
       PITC2->SetMarkerStyle(20);
       PITC2->SetMarkerColorAlpha(kGreen,0.6);
-      PointDiff1->SetMarkerStyle(20);
-      PointDiff1->SetMarkerColorAlpha(kBlack,0.6);
       PointDiff2->SetMarkerStyle(20);
       PointDiff2->SetMarkerColorAlpha(kBlack,0.6);
-      PointDiffC1->SetPoint(0, cxD1-CTIx1, cyD1-CTIy1);
-      PointDiffC1->SetMarkerStyle(29);
-      PointDiffC1->SetMarkerSize(2);
-      PointDiffC1->SetMarkerColorAlpha(kRed,0.6);
-      if(nHits3!=0){
-        PointDiffC2->SetPoint(0, cxD2-CTIx2, cyD2-CTIy2);
-        PointDiffC2->SetMarkerStyle(29);
-        PointDiffC2->SetMarkerSize(2);
-        PointDiffC2->SetMarkerColorAlpha(kRed,0.6);
-      }
-      if(i<1){
+      PointDiffC2->SetPoint(0, cxD2-CTIx2, cyD2-CTIy2);
+      PointDiffC2->SetMarkerStyle(29);
+      PointDiffC2->SetMarkerSize(2);
+      PointDiffC2->SetMarkerColorAlpha(kRed,0.6);
+      vDatas.push_back({cxD2-CTIx2, cyD2-CTIy2});
+      h2Diff2->Fill( cxD2-CTIx2, cyD2-CTIy2 );
+      h1DiffR->Fill( sqrt( pow(cxD2-CTIx2,2)+ pow(cyD2-CTIy2,2) ) );
+      if(i<20){
         c3->cd(1);
         h2T2->Draw("col");
         PointCT2->Draw("psame");
@@ -422,26 +373,15 @@ void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) 
         h2T1->Draw("col");
         PointCT1->Draw("psame");
         c3->cd(3);
-        
-        h2D1->Draw("ColzText"); // "PCOL" 表示按 Z 值上色的散點圖
-        PointCZDC1->Draw("psame");
-        PITC1->Draw("psame");
-        PITC1CTZT->Draw("psame");
-        c3->cd(4);
         h2D2->Draw("ColzText"); // "PCOL" 表示按 Z 值上色的散點圖
         PointCZDC2->Draw("psame");
-        PITC2->Draw("psame");
+        // PITC2->Draw("psame");
         PITC2CTZT->Draw("psame");
-        c3->cd(5);
-        h2DiffB->Draw("col");
-        PointDiff1->Draw("psame");
-        PointDiffC1->Draw("psame");
-        c3->cd(6);
-        h2DiffB->Draw("col");
-        PointDiff2->Draw("psame");
+        c3->cd(4);
+        h2DiffB2->Draw("col");
+        // PointDiff2->Draw("psame");
         PointDiffC2->Draw("psame");
-        
-        c3->Print(Form("%s/C_%05.0f.gif",SavePath.data(),i*1.));
+        c3->Print(Form("%s/C_%05.0f_D%d_%s.gif",(SavePath+BackStr).data(),i*1.,iDet,BackStr.data()));
       }
       h2D0->Reset();
       h2D1->Reset();
@@ -451,19 +391,120 @@ void DrawTriggerLinesCenter(const string  RootFileName ,const string SavePath ) 
 
       // 根據需求，進行進一步的數據處理
     }
-    TCanvas *c1 = new TCanvas("c1","c1",640*2+4,640+28);
-    c1->Divide(2,1);
-    c1->cd(1);
-    h2Diff1->Draw("colz");
-    c1->cd(2);
-    h2Diff2->Draw("colz");
-      
-    c1->Print(Form("%s/Diff.gif",SavePath.data()));
+    setTDRStyle();
+    LayoutProfile2DObj layoutD2(h2Diff2, 1080, "Colz", "Fit(Gaus)", "Fit(Gaus)");
+    layoutD2.canvas->Print(Form("%s/RSD_PosBMPDandZDCD%d_%s.gif",SavePath.data(),iDet,BackStr.data()));
+    layoutD2.Layout2x1D(600,"hep","hep");
+    layoutD2.Print2x1D(Form("%s/RSD_PosBMPDandZDCD%d_2x1D_%s.gif",SavePath.data(),iDet,BackStr.data()));
+    setTDRStyle();
+    LayoutProfile2DObj layoutD2C(h2Diff2C, 1080, "Colz", "Fit(Gaus)", "Fit(Gaus)");
+    layoutD2C.canvas->Print(Form("%s/RSD_PosCBMPDandZDCD%d_%s.gif",SavePath.data(),iDet,BackStr.data()));
+    layoutD2C.Layout2x1D(600,"hep","hep");
+    layoutD2C.Print2x1D(Form("%s/RSD_PosCBMPDandZDCD%d_2x1D_%s.gif",SavePath.data(),iDet,BackStr.data()));
     
+    
+    setTDRStyle();
+    gStyle->SetOptFit(0);
+    TF1 *fRay = new TF1("fRay", "[0] * x / ([1]*[1]) * exp(-x*x / (2*[1]*[1]))",0,h1DiffR->GetBinCenter(h1DiffR->GetMaximumBin())+h1DiffR->GetRMS()*2);
+    fRay->SetTitle("Rayleigh");
+    fRay->SetParNames("Norm","#sigma");
+    fRay->SetLineColor(kRed);
+    fRay->SetLineWidth(2);
+    TCanvas *c0 = new TCanvas("c0","c0",640+4,640+28); c0->cd();
+    double MaxY = h1DiffR->GetMaximum();
+    h1DiffR->Scale(1/MaxY);
+    h1DiffR->GetYaxis()->SetTitle(Form("Ratio(Max=%.1e)",MaxY));
+    h1DiffR->GetYaxis()->SetRangeUser(0,1.2);
+    h1DiffR->Draw("he");
+    fRay->SetParameters(h1DiffR->GetMaximum(), h1DiffR->GetRMS()); // reasonable initial values
+    fRay->SetParLimits(1, 0, 120);
+    h1DiffR->Fit(fRay,"R");   // R = respect fit range
+    fRay->Draw("lsame");
+    DrawFitInfo(fRay, 0.50,0.8,0.05,0b11011,4);
+    c0->Print(Form("%s/RSD_Pos_R_%s_D%d.gif",SavePath.data(),BackStr.data(),iDet));  
+
+    double MeanDx = h2Diff2->GetMean(1);
+    double MeanDy = h2Diff2->GetMean(2);
+    for(size_t i=0;i<vDatas.size();i++)
+      h1DiffR_PC->Fill(sqrt(pow(vDatas[i].first-MeanDx,2)+pow(vDatas[i].second-MeanDy,2)));
+    
+    double MaxYPC = h1DiffR_PC->GetMaximum();
+    h1DiffR_PC->Scale(1/MaxYPC);
+    TF1 *fRay_PC = (TF1*) fRay->Clone("fRay_PC");
+    fRay_PC->SetParameters(h1DiffR_PC->GetMaximum(), h1DiffR_PC->GetRMS()); // reasonable initial values
+    fRay_PC->SetParLimits(1, 0, 120);
+    h1DiffR_PC->GetYaxis()->SetTitle(Form("Ratio(Max=%.1e)",MaxYPC));
+    h1DiffR_PC->GetYaxis()->SetRangeUser(0,1.2);
+    h1DiffR_PC->Fit(fRay_PC,"R");
+    
+    h1DiffR_PC->Draw("colz");
+    DrawFitInfo(fRay_PC, 0.50,0.8,0.05,0b11011,4);
+    fRay_PC->Draw("lsame");
+    c0->Print(Form("%s/RSD_Pos_R_PC_%s_D%d.gif",SavePath.data(),BackStr.data(),iDet));  
+    
+    
+    ofstream ofS(Form("%s/RSD_DR_ZDC_%s_D%d.dat",SavePath.data(),BackStr.data(),iDet));
+    ofS<<"SigmaR\tESigmaR\tSigmaRPCal\tESigmaRPCal\n";
+    ofS<<fRay->GetParameter(1)<<"\t"<<fRay->GetParError(1)<<"\t";
+    ofS<<fRay_PC->GetParameter(1)<<"\t"<<fRay_PC->GetParError(1)<<endl;
+    ofS.close();
+    
+    gStyle->SetOptStat(1);
+    GSStatsPadNDC(0.7,0.7,.98,.95);
+    h2Dir->SetStats(1);
+    hThetaPhi->SetStats(1);
+    TCanvas *c1 = new TCanvas("c1","c1",640*2+4,640+28);
+    c1->Divide(2,1,0.001,0.001);
     c1->cd(1);
     h2Dir->Draw("colz");
     c1->cd(2);
     hThetaPhi->Draw("colz");
-    c1->Print(Form("%s/Direction.gif",SavePath.data()));
-    // 關閉文件
+    c1->Print(Form("%s/Direction_%s.gif",SavePath.data(),BackStr.data()));
+    
+    LayoutProfile2DObj layoutD2Slope(h2Dir, 1080, "Colz", "Fit(Gaus)", "Fit(Gaus)");
+    layoutD2Slope.canvas->Print(Form("%s/Direction_S_%s.gif",SavePath.data(),BackStr.data()));
+    layoutD2Slope.Layout2x1D(600,"hep","hep");
+    layoutD2Slope.Print2x1D(Form("%s/Direction_S_2x1D_%s.gif",SavePath.data(),BackStr.data()));
+    
+    LayoutProfile2DObj layoutD2TF(hThetaPhi, 1080, "Colz", "", "");
+    layoutD2TF.canvas->Print(Form("%s/Direction_TF_%s.gif",SavePath.data(),BackStr.data()));
+    layoutD2TF.Layout2x1D(600,"hep","hep");
+    layoutD2TF.Print2x1D(Form("%s/Direction_TF_2x1D_%s.gif",SavePath.data(),BackStr.data()));
+    
+    TCanvas *c2 = new TCanvas("c2","c2",640*1+4,640*2+28);
+    c2->Divide(1,2,0.001,0.001);
+    c2->cd(1);
+    h2Dir->Draw("colz");
+    c2->cd(2);
+    hThetaPhi->Draw("colz");
+    c2->Print(Form("%s/Direction_%s_Transpose.gif",SavePath.data(),BackStr.data()));
+    gStyle->SetOptStat(0);
+    gStyle->SetOptFit(1);
+    CleanupHistogramsAndCanvases();
+}
+
+void DrawTriggerLinesCenter( const string dirAnaPath , const string FileName, const int iDet ){
+  string SourceFileNameEvents = dirAnaPath+FileName+"_ReCon.root";
+  
+  TFile *file  = TFile::Open(SourceFileNameEvents.data());
+  TTree *t = (TTree*) file->Get("t");
+  if (!t) {
+      std::cerr << "Error: TTree pointer is null." << std::endl;
+      std::cerr << "  DrawTriggerLinesCenter.C("<<dirAnaPath<<","<<FileName<<")"<< std::endl;
+      return;
+  }
+  SavePath = dirAnaPath+string("/graphRec/");
+  system(Form("mkdir -p %s",SavePath.data()));
+  // iDet = TargetDet;
+  for(int i=0;i<3;i++){
+    system(Form("mkdir -p %s",(TString(SavePath)+sfWtNames[i]).Data()));
+    DrawTriggerLinesCenter(t,iDet,i);
+  }
+  file->Close();
+}
+void DrawTriggerLinesCenter() {
+  cout<< "Finished compile: DrawTriggerLinesCenter"<<endl;
+  // DrawTriggerLinesCenter("/data8/ZDC/EMCal/BeamTest/Feb25Sort/Feb25PWOOnly/Run2013_796MeV_HV17_VF650_650_x4_Pos145mm_-346mm_0mm_232554.122PbWO4/","Run2013_796MeV_HV17_VF650_650_x4_Pos145mm_-346mm_0mm_232554.122PbWO4",4);
+
+  // DrawTriggerLinesCenter("/data8/ZDC/EMCal/PbWO4SiPM/AnaCode1/Save/EScanTypicalRuns/Run2018_HV17_VF650_650_x4_Pos145mm_-346mm_0mm_234606.131PbWO4/","Run2018_HV17_VF650_650_x4_Pos145mm_-346mm_0mm_234606.131PbWO4",4);
 }

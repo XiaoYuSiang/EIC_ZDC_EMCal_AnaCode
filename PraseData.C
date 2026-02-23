@@ -12,7 +12,7 @@ using namespace std;
 namespace fs = std::filesystem;
 
 string TargetRun = 
-" 203 219 222 209 226 227 214 234 235 240 241 245 246 252 "
+" 2015 2016 2017 2018 2019 2020 "
 ;
 // 讀取輸入並解析成數字陣列
 std::vector<int> parseInput() {
